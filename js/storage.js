@@ -33,7 +33,7 @@ const canEditPlan=l=>canEditKey('plans',l.id);
 const docKey=d=>d.qc?['defects',d.id]:['requests',d.rootId];
 const canEditDefect=d=>canEditKey(...docKey(d));
 const canCreate=()=>MODE.kind!=='cloud'||(!!MODE.uid&&MODE.ready);
-const grpOf=(c,o)=>c==='requests'?(o.rootId||o.id):c==='defects'?(o.qc?o.id:(o.rootId||o.id)):c==='plans'?o.id:'';
+const grpOf=(c,o)=>c==='requests'?(o.rootId||o.id):c==='defects'?(o.qc?o.id:(o.rootId||o.id)):c==='plans'?(o.fileId||o.id):'';
 async function allocNo(kind,start){
   if(MODE.kind!=='cloud')return null;
   const{data,error}=await MODE.sb.rpc('next_no',{p_k:kind,p_start:start||1});
@@ -115,7 +115,7 @@ async function ensureData(ids,png){
 async function gcImages(){
   if(!IDBH||MODE.kind!=='local')return;const used=new Set(['logo','sig']);
   const add=id=>id&&used.add(id);
-  S.library.forEach(p=>add(p.imgId));S.requests.forEach(r=>reqImageIds(r).forEach(add));qcImageIds().forEach(add);add(S.project.logoId);add(S.project.sigId);add(S.project.reqSigId);add(S.project.engSigId);
+  S.library.forEach(p=>{add(p.imgId);add(p.srcId)});S.requests.forEach(r=>reqImageIds(r).forEach(add));qcImageIds().forEach(add);add(S.project.logoId);add(S.project.sigId);add(S.project.reqSigId);add(S.project.engSigId);
   const tx=IDBH.transaction('img','readwrite');
   for(const k of [...IMG.keys()]){if(!used.has(k)){IMG.delete(k);tx.objectStore('img').delete(k)}}
 }

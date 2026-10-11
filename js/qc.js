@@ -111,33 +111,116 @@ function editQC(d,ctx){
     if(q==='del'){armBtn(b,'กดอีกครั้งเพื่อลบ',()=>{S.defects=S.defects.filter(z=>z.id!==d.id);save();done()});return}
   });
 }
+/* ---------- แบบหน้างาน = รายการไฟล์ (1 ไฟล์ = 1 แถว, PDF หลายหน้าแสดงเป็นหน้าเมื่อกดเปิด) ----------
+   รายการใน S.library: หน้าแบบ {fileId,fileName,page,pages,ext,...} หรือไฟล์แนบ DWG {type:'attach',srcId,...} */
+const isPage=l=>l.type!=='attach';
+const sitePages=()=>S.library.filter(isPage);
+const fidOf=l=>l.fileId||l.id;
+const fileItems=fid=>S.library.filter(l=>fidOf(l)===fid);
+const byPage=(a,b)=>(a.page||1)-(b.page||1);
+const isCad=f=>/\.(dwg|dxf)$/i.test(f.name||'');
+const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':Math.max(1,Math.round(n/1024))+' KB';
+function siteGroups(){
+  const m=new Map();
+  S.library.forEach(l=>{const k=fidOf(l);if(!m.has(k))m.set(k,{fid:k,pages:[],attach:[]});const g=m.get(k);(isPage(l)?g.pages:g.attach).push(l)});
+  const out=[...m.values()];
+  out.forEach(g=>{g.pages.sort(byPage);g.head=g.pages[0]||g.attach[0];g.name=g.head.fileName||g.head.name;g.rev=g.head.rev||'';g.date=g.head.date||'';g.group=g.head.group||''});
+  out.sort((a,b)=>String(a.group).localeCompare(String(b.group),'th',{numeric:true})||String(a.name).localeCompare(String(b.name),'th',{numeric:true}));
+  return out;
+}
+/* ทำให้ชื่อ/เลขหน้า/จำนวนหน้าของไฟล์สอดคล้องกัน หลังเพิ่ม-แทนที่-ลบหน้า */
+function normalizeFile(fid){
+  const pg=fileItems(fid).filter(isPage).sort(byPage);const head=pg[0];if(!head)return;
+  const base=head.fileName||head.name;
+  pg.forEach((l,i)=>{l.fileId=fid;l.fileName=base;l.page=i+1;l.pages=pg.length;l.name=pg.length>1?`${base} (หน้า ${i+1})`:base});
+}
+function setFileMeta(fid,k,v){
+  const its=fileItems(fid);
+  if(k==='name'){its.forEach(l=>{l.fileName=v});normalizeFile(fid)}
+  else its.forEach(l=>{l[k]=v});
+}
+async function addAttach(file,fid,meta){
+  if(file.size>45*1024*1024){toast('ไฟล์ '+file.name+' ใหญ่เกิน 45 MB (ข้อจำกัดของ Supabase แพ็กเกจฟรี) — ส่งเป็น PDF แทน หรือบีบอัดไฟล์',6000);return null}
+  toast('กำลังอัปโหลด '+file.name+' ('+fmtSize(file.size)+')…',4000);
+  const url=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=()=>rej(fr.error);fr.readAsDataURL(new Blob([file],{type:'application/octet-stream'}))});
+  const srcId=await putImage(url);if(MODE.kind==='cloud')IMGDATA.delete(srcId);   // ไม่ถือไฟล์ใหญ่ไว้ในหน่วยความจำ
+  const l={id:'lb'+uid(),type:'attach',fileId:fid,name:file.name,ext:(file.name.match(/\.([^.]+)$/)||[])[1]||'dwg',srcId,size:file.size,date:todayISO(),...(meta||{})};
+  S.library.push(l);return l;
+}
+async function downloadAttach(l){
+  try{toast('กำลังดาวน์โหลด…',2500);const s=imgSrc(l.srcId);let blob;
+    if(/^data:/.test(s))blob=dataUrlToBlob(s);else{const r=await fetch(s);if(!r.ok)throw new Error('HTTP '+r.status);blob=await r.blob()}
+    await saveFile(l.name,new Blob([blob],{type:'application/octet-stream'}));
+  }catch(e){toast('ดาวน์โหลดไม่สำเร็จ: '+(e.message||e),4500)}
+}
+/* ใส่หน้าแบบ (PDF/รูป) ลงไฟล์: แทนที่ตามลำดับหน้า คงโซน/หมุดเดิม, หน้าเกินต่อท้าย, หน้าเดิมที่เหลือไม่ลบ */
+async function replaceSite(fid,f){
+  const items=fileItems(fid);const old=items.filter(isPage).sort(byPage);const head=old[0]||items[0];
+  const nl=await importPlanFiles([f],{fileId:fid,maxPages:40});if(!nl.length)return;
+  S.library=S.library.filter(x=>!nl.includes(x));
+  let shift=false;
+  nl.forEach((n,i)=>{const o=old[i];
+    if(o){if(Math.abs(o.w/o.h-n.w/n.h)>.03)shift=true;o.imgId=n.imgId;o.w=n.w;o.h=n.h;o.ext=n.ext;o.date=todayISO()}
+    else{n.rev=head.rev;n.group=head.group;n.date=todayISO();n.shapes=[];if(head.sym)n.sym=head.sym;S.library.push(n)}});
+  const keep=head.fileName||(nl[0]&&nl[0].fileName);fileItems(fid).forEach(x=>x.fileName=keep);
+  normalizeFile(fid);save();render();
+  toast(old.length>nl.length?`แทนที่ ${nl.length} หน้า (หน้าเดิมที่เหลือยังอยู่ ลบเองได้ถ้าไม่ใช้)`:shift?'เปลี่ยนแบบแล้ว แต่สัดส่วนรูปต่างจากเดิม โซน/หมุดอาจเลื่อน ตรวจสอบอีกครั้ง':'เปลี่ยนเป็นฉบับใหม่แล้ว โซนและหมุดคงเดิม',5000);
+}
+
 function pickSitePlan(cb){
-  if(!S.library.length){toast('ยังไม่มีแบบหน้างาน — เพิ่มที่แท็บ “แบบหน้างาน” ก่อน',3500);return}
-  if(S.library.length===1)return cb(S.library[0]);
-  const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุดบนแบบไหน</h3>${S.library.map(l=>`<button class="pickrow" data-l="${l.id}"><b>${esc(l.name)}</b><span class="small muted">${esc(l.rev||'')}</span></button>`).join('')}<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-l="">ยกเลิก</button></div></div>`,'modal');
+  const L=sitePages();
+  if(!L.length){toast('ยังไม่มีแบบหน้างาน — เพิ่มที่แท็บ “แบบหน้างาน” ก่อน',3500);return}
+  if(L.length===1)return cb(L[0]);
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุดบนแบบไหน</h3>${L.map(l=>`<button class="pickrow" data-l="${l.id}"><b>${esc(l.name)}</b><span class="small muted">${esc(l.rev||'')}</span></button>`).join('')}<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-l="">ยกเลิก</button></div></div>`,'modal');
   o.addEventListener('click',e=>{const b=e.target.closest('[data-l]');if(!b&&e.target!==o)return;o.remove();if(b&&b.dataset.l)cb(libById(b.dataset.l))});
 }
 
 /* ---------- หน้าแบบหน้างาน ---------- */
+function siteThumb(l){
+  const pins=qcList().filter(d=>d.loc&&d.loc.libId===l.id&&d.status!=='closed').map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status}));
+  return annotatedSvg(imgSrc(l.imgId),l.w,l.h,l.shapes||[],pins,{scale:l.sym});
+}
+function siteStats(g){
+  const ids=new Set(g.pages.map(p=>p.id));const open=qcList().filter(d=>d.loc&&ids.has(d.loc.libId)&&d.status!=='closed').length;
+  const nz=g.pages.reduce((n,p)=>n+(p.shapes||[]).filter(s=>s.t==='poly').length,0);
+  return `<span class="chip ${open?'bad':'good'}">${open?'QC ค้าง '+open:'ไม่มี QC ค้าง'}</span>${nz?`<span class="chip">${nz} โซน</span>`:''}`;
+}
 function viewSite(){
-  const owner=canCreate();const lib=[...S.library].sort((a,b)=>String(a.group||'').localeCompare(String(b.group||''),'th',{numeric:true})||String(a.name).localeCompare(String(b.name),'th',{numeric:true}));
-  let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">แบบหน้างาน (ฉบับปัจจุบัน)</h1>${owner?'<label class="btn pri" for="sitefile">＋ อัปโหลดแบบ (รูป / PDF)</label><input id="sitefile" type="file" accept="image/*,application/pdf" multiple hidden>':''}</div>
-   <p class="hint" style="margin:0 0 12px">${owner?'อัปโหลดแบบฉบับล่าสุดให้ทีมใช้ที่หน้างาน · เปิดแบบเพื่อวาดโซนสี (บันทึกให้ทุกคนเห็น) และปักหมุด QC DEFECT · เมื่อแบบอัปเดต ใช้ “อัปโหลดฉบับใหม่” เพื่อแทนรูปโดยคงโซนและหมุดเดิม':'แตะแบบเพื่อเปิด ซูม ดูหมุด QC DEFECT และขีดเขียน/วางโซนของตัวเองได้ (เก็บในเครื่องนี้ ไม่ส่งถึงคนอื่น) แล้วกด “บันทึกเป็นรูป” เพื่อแชร์'}</p>`;
-  if(!lib.length)return h+`<div class="empty">${owner?'ยังไม่มีแบบ กด “อัปโหลดแบบ” เพื่อเพิ่มแบบฉบับปัจจุบัน':'ยังไม่มีแบบหน้างาน'}</div>`;
-  const hasGroup=lib.some(x=>x.group);let last=null,cards='';
-  for(const l of lib){
-    const pins=qcList().filter(d=>d.loc&&d.loc.libId===l.id);const open=pins.filter(d=>d.status!=='closed');const nz=(l.shapes||[]).filter(s=>s.t==='poly').length;
-    if(hasGroup&&(l.group||'')!==last)cards+=`<div class="ghead l1" style="grid-column:1/-1;margin-top:10px"><b>${esc(l.group||'ไม่ระบุกลุ่ม')}</b></div>`;last=l.group||'';
-    cards+=`<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,l.shapes||[],open.map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status})),{scale:l.sym})}</div><div class="body">
-     ${canEditPlan(l)?`<input type="text" data-sl="${l.id}" data-k="name" value="${esc(l.name)}" aria-label="ชื่อแบบ">
-      <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px"><input type="text" data-sl="${l.id}" data-k="rev" value="${esc(l.rev||'')}" placeholder="Rev. เช่น R3" aria-label="revision"><input type="date" data-sl="${l.id}" data-k="date" value="${esc(l.date||'')}" aria-label="วันที่แบบ"></div>
-      <input type="text" data-sl="${l.id}" data-k="group" value="${esc(l.group||'')}" placeholder="กลุ่ม เช่น อาคาร A / ชั้น 3" list="sitegrp">`
-      :`<b>${esc(l.name)}</b><div class="small muted">${esc([l.rev,l.date&&fmtDate(l.date)].filter(Boolean).join(' · '))}</div>`}
-     ${MODE.kind==='cloud'?`<div class="row small" style="gap:4px">${aclSummary('plans',l.id)}</div>`:''}
-     <div class="row small">${open.length?`<span class="chip bad">QC ค้าง ${open.length}</span>`:'<span class="chip good">ไม่มี QC ค้าง</span>'}${nz?`<span class="chip">${nz} โซน</span>`:''}</div>
-     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดแบบ</button>${canEditPlan(l)?`<label class="btn sm" for="siterep-${l.id}">อัปโหลดฉบับใหม่</label><input id="siterep-${l.id}" data-rep="${l.id}" type="file" accept="image/*,application/pdf" hidden>`:''}${isOwnerKey('plans',l.id)?`<button class="btn sm bad" data-act="sitedel" data-id="${l.id}">ลบ</button>`:''}</div></div></div>`;
+  const owner=canCreate();const groups=siteGroups();
+  if(UI.siteFile){const g=groups.find(x=>x.fid===UI.siteFile);if(g&&g.pages.length>1)return viewSiteFile(g);UI.siteFile=null}
+  let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">แบบหน้างาน (ฉบับปัจจุบัน)</h1>${owner?'<label class="btn pri" for="sitefile">＋ อัปโหลดแบบ (PDF / รูป / DWG)</label><input id="sitefile" type="file" accept="image/*,application/pdf,.dwg,.dxf" multiple hidden>':''}</div>
+   <p class="hint" style="margin:0 0 12px">${owner?'อัปโหลดแบบฉบับล่าสุดให้ทีมใช้ที่หน้างาน — PDF หลายหน้าแสดงเป็น 1 ไฟล์ กดเปิดเพื่อดูทีละหน้า · เปิดแบบเพื่อวาดโซนสีและปักหมุด QC DEFECT · ไฟล์ DWG เก็บไว้ให้ดาวน์โหลด (เบราว์เซอร์เปิดดู DWG ไม่ได้ — ถ้าจะดู/ปักหมุดหน้างาน ให้ส่งออกเป็น PDF แล้วเพิ่มภาพแบบเข้าไฟล์เดียวกัน, ตั้งชื่อไฟล์เหมือนกันตอนอัปโหลดพร้อมกันจะจับคู่ให้อัตโนมัติ)':'แตะไฟล์เพื่อเปิดแบบ ซูม ดูหมุด QC DEFECT และขีดเขียน/วางโซนของตัวเองได้ (เก็บในเครื่องนี้ ไม่ส่งถึงคนอื่น) แล้วกด “บันทึกเป็นรูป” เพื่อแชร์'}</p>`;
+  if(!groups.length)return h+`<div class="empty">${owner?'ยังไม่มีแบบ กด “อัปโหลดแบบ” เพื่อเพิ่มแบบฉบับปัจจุบัน':'ยังไม่มีแบบหน้างาน'}</div>`;
+  const hasGroup=groups.some(x=>x.group);let last=null,rows='';
+  for(const g of groups){
+    const hd=g.head,can=canEditPlan(hd),mine=isOwnerKey('plans',hd.id),editing=UI.siteEdit===g.fid&&can;
+    if(hasGroup&&g.group!==last)rows+=`<div class="ghead l1" style="margin-top:10px"><b>${esc(g.group||'ไม่ระบุกลุ่ม')}</b></div>`;last=g.group;
+    const p0=g.pages[0];const cad=g.attach.filter(a=>/^(dwg|dxf)$/i.test(a.ext||''));
+    const kind=!p0?'DWG':p0.ext==='pdf'?'PDF':'รูป';
+    const thumb=p0?`<div class="sth" data-act="siteopenf" data-id="${g.fid}">${siteThumb(p0)}</div>`:`<div class="sth cad" data-act="siteopenf" data-id="${g.fid}"><b>DWG</b><span>ยังไม่มีภาพแบบ</span></div>`;
+    rows+=`<div class="srow">${thumb}<div class="sbd">
+      <div class="row" style="gap:6px"><b class="sn">${esc(g.name)}</b><span class="chip">${kind}${g.pages.length>1?` · ${g.pages.length} หน้า`:''}</span>${g.pages.length&&cad.length?'<span class="chip">+ DWG</span>':''}</div>
+      <div class="small muted">${esc([g.rev,g.date&&fmtDate(g.date)].filter(Boolean).join(' · ')||'—')}</div>
+      <div class="row small" style="gap:4px">${p0?siteStats(g):''}${MODE.kind==='cloud'?aclSummary('plans',hd.id):''}</div>
+      ${g.attach.map(a=>`<div class="row small" style="gap:6px"><span class="chip">${esc(a.name)}${a.size?' · '+fmtSize(a.size):''}</span><button class="btn sm" data-act="sitedl" data-id="${a.id}">ดาวน์โหลด</button>${can?`<button class="btn sm bad" data-act="delatt" data-id="${a.id}">ลบไฟล์นี้</button>`:''}</div>`).join('')}
+      ${editing?`<div class="sedit"><input type="text" data-sl="${g.fid}" data-k="name" value="${esc(g.name)}" aria-label="ชื่อไฟล์แบบ">
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px"><input type="text" data-sl="${g.fid}" data-k="rev" value="${esc(g.rev)}" placeholder="Rev. เช่น R3" aria-label="revision"><input type="date" data-sl="${g.fid}" data-k="date" value="${esc(g.date)}" aria-label="วันที่แบบ"></div>
+        <input type="text" data-sl="${g.fid}" data-k="group" value="${esc(g.group)}" placeholder="กลุ่ม เช่น อาคาร A / ชั้น 3" list="sitegrp"></div>`:''}
+      <div class="row"><button class="btn pri sm" data-act="siteopenf" data-id="${g.fid}">${g.pages.length>1?'เปิดไฟล์':'เปิดแบบ'}</button>
+       ${can?`<button class="btn sm" data-act="siteedit" data-id="${g.fid}">${editing?'เสร็จ':'แก้ไขชื่อ/Rev.'}</button><label class="btn sm" for="siterep-${g.fid}">${p0?'อัปโหลดฉบับใหม่':'ใส่ภาพแบบ (PDF/รูป)'}</label><input id="siterep-${g.fid}" data-rep="${g.fid}" type="file" accept="image/*,application/pdf" hidden>
+       <label class="btn sm" for="siteatt-${g.fid}">แนบ DWG</label><input id="siteatt-${g.fid}" data-attach="${g.fid}" type="file" hidden>`:''}
+       ${mine?`<button class="btn sm bad" data-act="sitedel" data-id="${g.fid}">ลบไฟล์</button>`:''}</div></div></div>`;
   }
-  return h+`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${cards}</div><datalist id="sitegrp">${[...new Set(S.library.map(l=>l.group).filter(Boolean))].map(g=>`<option>${esc(g)}</option>`).join('')}</datalist>`;
+  return h+`<div class="siterows">${rows}</div><datalist id="sitegrp">${[...new Set(groups.map(g=>g.group).filter(Boolean))].map(g=>`<option>${esc(g)}</option>`).join('')}</datalist>`;
+}
+function viewSiteFile(g){
+  const can=canEditPlan(g.head);
+  return `<div class="row" style="margin-bottom:10px"><button class="btn" data-act="siteback">‹ รายการแบบ</button><h1 style="font-size:20px;margin-right:auto">${esc(g.name)}</h1><span class="chip">${g.pages.length} หน้า</span>${g.rev?`<span class="chip">${esc(g.rev)}</span>`:''}</div>
+  <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">${g.pages.map(l=>{
+    const open=qcList().filter(d=>d.loc&&d.loc.libId===l.id&&d.status!=='closed').length;const nz=(l.shapes||[]).filter(s=>s.t==='poly').length;
+    return `<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${siteThumb(l)}</div><div class="body"><b class="small">หน้า ${l.page||1}</b>
+     <div class="row small">${open?`<span class="chip bad">QC ค้าง ${open}</span>`:'<span class="chip good">ไม่มี QC ค้าง</span>'}${nz?`<span class="chip">${nz} โซน</span>`:''}</div>
+     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดหน้านี้</button>${can&&g.pages.length>1&&isOwnerKey('plans',l.id)?`<button class="btn sm bad" data-act="sitedelpg" data-id="${l.id}">ลบหน้า</button>`:''}</div></div></div>`}).join('')}</div>`;
 }
 const SITE_MINE=id=>'sitemine:'+id;
 function openSite(lib,opts){
@@ -245,25 +328,51 @@ const QCACT={
   qcopen(a,id){const d=defectById(id);if(d)editQC(d,{after:()=>render()})},
   qcpdf(){exportQC('pdf')},qchtml(){exportQC('html')},
   siteopen(a,id){const l=libById(id);if(l)openSite(l,{after:()=>render()})},
-  sitedel(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.library=S.library.filter(l=>l.id!==id);S.defects.forEach(d=>{if(d.qc&&d.loc&&d.loc.libId===id)d.loc=null});save();render()})}
+  siteopenf(a,id){const pg=fileItems(id).filter(isPage).sort(byPage);
+    if(!pg.length){toast('ไฟล์นี้มีเฉพาะ DWG — กด “ใส่ภาพแบบ (PDF/รูป)” เพื่อเพิ่มภาพสำหรับดู/ปักหมุด หรือดาวน์โหลด DWG',5000);return}
+    if(pg.length===1){openSite(pg[0],{after:()=>render()});return}
+    UI.siteFile=id;render();window.scrollTo(0,0)},
+  siteback(){UI.siteFile=null;render()},
+  siteedit(a,id){UI.siteEdit=UI.siteEdit===id?null:id;render()},
+  sitedl(a,id){const l=libById(id);if(l)downloadAttach(l)},
+  delatt(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.library=S.library.filter(l=>l.id!==id);save();render()})},
+  sitedelpg(a,id){armBtn(a,'กดอีกครั้งเพื่อลบหน้า',()=>{const l=libById(id);if(!l)return;const fid=fidOf(l);S.library=S.library.filter(x=>x.id!==id);S.defects.forEach(d=>{if(d.qc&&d.loc&&d.loc.libId===id)d.loc=null});normalizeFile(fid);save();render()})},
+  sitedel(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{const ids=new Set(fileItems(id).map(l=>l.id));S.library=S.library.filter(l=>!ids.has(l.id));S.defects.forEach(d=>{if(d.qc&&d.loc&&ids.has(d.loc.libId))d.loc=null});if(UI.siteFile===id)UI.siteFile=null;save();render()})}
 };
 function qcInput(t){
   if(t.id==='qf'){UI.qf=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qg'){UI.qg=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qq'){UI.qq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewQC();const q=$('#qq');q.focus();q.setSelectionRange(p,p);return true}
-  if(t.dataset&&t.dataset.sl){if(MODE.ro)return true;const l=libById(t.dataset.sl);if(l){l[t.dataset.k]=t.value;save()}return true}
+  if(t.dataset&&t.dataset.sl){if(MODE.ro)return true;if(fileItems(t.dataset.sl).length){setFileMeta(t.dataset.sl,t.dataset.k,t.value);save()}return true}
   return false;
 }
 async function qcChange(t){
-  if(t.id==='sitefile'&&!MODE.ro){const libs=await importPlanFiles([...t.files]);t.value='';libs.forEach(l=>{l.date=todayISO();l.shapes=[]});if(libs.length){save();render();toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว ตั้งชื่อ/Rev. ได้ที่การ์ด')}return true}
-  if(t.dataset&&t.dataset.rep&&!MODE.ro){const l=libById(t.dataset.rep);const files=[...t.files];t.value='';if(!l||!files.length)return true;
-    const nl=await importPlanFiles(files.slice(0,1));if(nl.length){const n=nl[0];S.library=S.library.filter(x=>x!==n);const ar0=l.w/l.h,ar1=n.w/n.h;l.imgId=n.imgId;l.w=n.w;l.h=n.h;l.date=todayISO();save();render();
-      toast(Math.abs(ar0-ar1)>.03?'เปลี่ยนแบบแล้ว แต่สัดส่วนรูปต่างจากเดิม โซน/หมุดอาจเลื่อน ตรวจสอบอีกครั้ง':'เปลี่ยนเป็นฉบับใหม่แล้ว โซนและหมุดคงเดิม',5000)}
+  if(t.id==='sitefile'&&!MODE.ro){
+    const files=[...t.files];t.value='';if(!files.length)return true;
+    const byBase=new Map();let nPdf=0,nCad=0;
+    for(const f of files.filter(f=>!isCad(f))){const ls=await importPlanFiles([f],{maxPages:40});if(ls.length){const fid=ls[0].fileId;ls.forEach(l=>{l.date=todayISO();l.shapes=[]});byBase.set(ls[0].fileName.toLowerCase(),fid);nPdf++}}
+    for(const f of files.filter(isCad)){
+      const base=f.name.replace(/\.[^.]+$/,'');const fid=byBase.get(base.toLowerCase())||('fl'+uid());
+      const had=fileItems(fid)[0];const l=await addAttach(f,fid,had?{}:{fileName:base,rev:'',group:''});if(l){nCad++;if(had){l.fileName=had.fileName;l.rev=had.rev;l.group=had.group}}}
+    if(nPdf+nCad){save();render();toast((nPdf?`เพิ่มไฟล์แบบ ${nPdf} ไฟล์`:'')+(nPdf&&nCad?' + ':'')+(nCad?`DWG ${nCad} ไฟล์`:'')+' แล้ว — กด “แก้ไขชื่อ/Rev.” ที่แถวเพื่อตั้งชื่อ/กลุ่ม',5000)}
+    return true}
+  if(t.dataset&&t.dataset.rep&&!MODE.ro){const f=[...t.files][0];t.value='';if(f)await replaceSite(t.dataset.rep,f);return true}
+  if(t.dataset&&t.dataset.attach&&!MODE.ro){const f=[...t.files][0];t.value='';if(!f)return true;
+    if(!isCad(f)){toast('ไฟล์แนบรองรับ .dwg / .dxf — ถ้าเป็น PDF/รูป ใช้ปุ่ม “อัปโหลดฉบับใหม่”',4500);return true}
+    const fid=t.dataset.attach;const had=fileItems(fid)[0];const l=await addAttach(f,fid,{});if(l){if(had){l.fileName=had.fileName;l.rev=had.rev;l.group=had.group;l.date=had.date||l.date}save();render();toast('แนบ DWG แล้ว')}
     return true}
   return false;
 }
 /* UI + report styles for this module */
 (function(){const s=document.createElement('style');s.id='qccss';s.textContent=`
+.siterows{display:flex;flex-direction:column;gap:10px}
+.srow{display:flex;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
+.srow .sth{flex:0 0 130px;height:96px;background:var(--surface2);border-radius:6px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.srow .sth svg{width:100%;height:100%;display:block}
+.srow .sth.cad{flex-direction:column;gap:2px;color:var(--muted)}.srow .sth.cad b{font-size:22px;letter-spacing:.05em}.srow .sth.cad span{font-size:11px}
+.srow .sbd{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}.srow .sn{font-size:15px;word-break:break-word}
+.sedit{display:flex;flex-direction:column;gap:6px}
+@media(max-width:560px){.srow{flex-direction:column}.srow .sth{flex:none;width:100%;height:150px}}
 [hidden]{display:none!important}
 .ba{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--line)}
 .ba .bx{position:relative;aspect-ratio:4/3;background:var(--surface2);overflow:hidden;display:flex;align-items:center;justify-content:center}

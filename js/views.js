@@ -19,7 +19,7 @@ function pickKind(role,cb){
   const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">${role==='open'?'เลือกประเภทการส่งตรวจ':'เลือกประเภทการส่งซ้ำ'}</h3>${ks.map(k=>`<button class="pickrow" data-k="${esc(k.id)}"><b>${esc(k.label)}</b></button>`).join('')}<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-k="">ยกเลิก</button></div></div>`,'modal');
   o.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==o)return;o.remove();if(b&&b.dataset.k)cb(ks.find(k=>k.id===b.dataset.k))});
 }
-function go(route,id,tab){UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
+function go(route,id,tab){if(route!==UI.route){UI.siteFile=null;UI.siteEdit=null}UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
 
 function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
 function render(){
@@ -255,13 +255,19 @@ function tabPlans(r){
      <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">ทำสี / ปักหมุด</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`}
   return h+`</div>`;
 }
-async function importPlanFiles(files){
-  const out=[];
+/* นำเข้าไฟล์แบบ: 1 ไฟล์ = 1 fileId (PDF หลายหน้า = หลายรายการที่ fileId เดียวกัน)
+   opts: {fileId, maxPages} */
+async function importPlanFiles(files,opts){
+  opts=opts||{};const out=[];
   for(const f of files){try{
-    if(f.type==='application/pdf'||/\.pdf$/i.test(f.name)){toast('กำลังอ่าน PDF…');const ims=await pdfToImages(f);ims.forEach(im=>out.push({...im,name:f.name.replace(/\.pdf$/i,'')+(im.pages>1?` (หน้า ${im.page})`:'')}))}
-    else{const im=await fileToImage(f,2600,.88);out.push({...im,name:(f.name||'แบบ').replace(/\.[^.]+$/,'')})}
+    const isPdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name);const base=(f.name||'แบบ').replace(/\.[^.]+$/,'');
+    const fid=opts.fileId||('fl'+uid());
+    if(isPdf){toast('กำลังอ่าน PDF…',3000);const ims=await pdfToImages(f,opts.maxPages||6,(n,t)=>{if(t>1)toast(`กำลังแปลงหน้า ${n}/${t}…`,1500)});
+      if(ims.length&&ims[0].pages>ims.length)toast(`PDF มี ${ims[0].pages} หน้า แปลงให้ ${ims.length} หน้าแรก`,5000);
+      ims.forEach(im=>out.push({...im,base,fid,ext:'pdf',name:base+(ims.length>1?` (หน้า ${im.page})`:''),pages:ims.length}))}
+    else{const im=await fileToImage(f,2600,.88);out.push({...im,base,fid,ext:'img',name:base,page:1,pages:1})}
   }catch(e){toast('เปิดไฟล์ '+(f.name||'')+' ไม่ได้ — ถ้าเป็น PDF ลองแคปเป็นรูปแล้วอัปโหลด',4500)}}
-  const libs=[];for(const im of out){const imgId=await putImage(im.url);const lib={id:'lb'+uid(),name:im.name,imgId,w:im.w,h:im.h};S.library.push(lib);libs.push(lib)}
+  const libs=[];for(const im of out){const imgId=await putImage(im.url);const lib={id:'lb'+uid(),name:im.name,imgId,w:im.w,h:im.h,fileId:im.fid,fileName:im.base,page:im.page,pages:im.pages,ext:im.ext};S.library.push(lib);libs.push(lib)}
   return libs;
 }
 function attachPlan(r,lib){const key='pk'+uid();r.plans.push({id:'pl'+uid(),key,libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:[]});save()}
@@ -269,7 +275,7 @@ function planPicker(r,cb){
   const o=overlay(`<div class="box wide"><div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">เพิ่มแบบเข้าใบตรวจ</h3><button class="btn" data-x="close">ปิด</button></div>
    <div class="row" style="margin-bottom:12px"><label class="btn pri" for="planfile">อัปโหลดแบบใหม่ (รูป / PDF)</label><input id="planfile" type="file" accept="image/*,application/pdf" multiple hidden><span class="hint" style="margin:0">แบบที่อัปโหลดจะเก็บไว้ในคลัง ใช้ซ้ำได้ทุกใบตรวจ</span></div>
    <div id="libgrid" class="cards"></div></div>`,'modal');
-  const draw=()=>{$('#libgrid',o).innerHTML=S.library.length?S.library.map(l=>`<button class="pickrow" style="flex-direction:column;align-items:stretch" data-lib="${l.id}"><div style="aspect-ratio:4/3;background:var(--surface2);border-radius:6px;overflow:hidden">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><b class="small">${esc(l.name)}</b></button>`).join(''):'<div class="empty">คลังแบบว่าง — อัปโหลดแบบแรกได้เลย</div>'};draw();
+  const draw=()=>{$('#libgrid',o).innerHTML=sitePages().length?sitePages().map(l=>`<button class="pickrow" style="flex-direction:column;align-items:stretch" data-lib="${l.id}"><div style="aspect-ratio:4/3;background:var(--surface2);border-radius:6px;overflow:hidden">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><b class="small">${esc(l.name)}</b></button>`).join(''):'<div class="empty">คลังแบบว่าง — อัปโหลดแบบแรกได้เลย</div>'};draw();
   o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]')){o.remove();return}
     const b=e.target.closest('[data-lib]');if(b){const l=S.library.find(x=>x.id===b.dataset.lib);if(cb)cb(l);else{attachPlan(r,l);toast('เพิ่มแบบแล้ว')}o.remove();refreshTab()}});
   o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files]);if(libs.length){if(cb)cb(libs[0]);else{libs.forEach(l=>attachPlan(r,l));toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว')}o.remove();refreshTab();save()}}});
@@ -383,7 +389,7 @@ function viewSettings(){
    <div class="row" style="margin-top:14px"><div style="width:90px;height:60px;background:#fff;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center"><img src="${imgSrc(P.logoId)||''}" style="max-height:56px" alt=""></div><label class="btn" for="logofile">เปลี่ยนโลโก้</label><input id="logofile" type="file" accept="image/*" hidden></div></div>
   <div class="panel"><h3>รายการตรวจ (Checklist)</h3><p class="hint">แก้ชื่อ เพิ่ม หรือลบรายการได้ ผลที่กรอกไว้ในใบเดิมไม่หาย (ผูกกับรายการที่ชื่อ English ตรงกัน)</p>${cl}</div>
   <div class="panel"><h3>รายการเลือก DEFECT</h3><div class="grid g2"><label class="f">ประเภท DEFECT (บรรทัดละ 1)<textarea data-list="defectTypes" rows="10">${esc(P.defectTypes.join('\n'))}</textarea></label><label class="f">วิธีแก้เฉพาะจุด (บรรทัดละ 1)<textarea data-list="fixMethods" rows="10">${esc(P.fixMethods.join('\n'))}</textarea></label></div></div>
-  <div class="panel"><h3>คลังแบบ (${S.library.length})</h3>${S.library.length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${S.library.map(l=>`<div class="card"><div class="thumb" style="cursor:default">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><div class="body"><input type="text" data-lib="${l.id}" value="${esc(l.name)}" aria-label="ชื่อแบบ"><button class="btn sm bad" data-act="dellib" data-id="${l.id}">ลบออกจากคลัง</button></div></div>`).join('')}</div>`:'<div class="empty small">ยังไม่มีแบบในคลัง เพิ่มจากหน้า “แบบ / ขอบเขต” ในใบตรวจ</div>'}</div>
+  <div class="panel"><h3>คลังแบบ (${sitePages().length})</h3>${sitePages().length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${sitePages().map(l=>`<div class="card"><div class="thumb" style="cursor:default">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><div class="body"><input type="text" data-lib="${l.id}" value="${esc(l.name)}" aria-label="ชื่อแบบ"><button class="btn sm bad" data-act="dellib" data-id="${l.id}">ลบออกจากคลัง</button></div></div>`).join('')}</div>`:'<div class="empty small">ยังไม่มีแบบในคลัง เพิ่มจากหน้า “แบบ / ขอบเขต” ในใบตรวจ</div>'}</div>
   <div class="panel"><h3>สำรองและกู้ข้อมูล</h3><div class="hint" id="usage"></div><p class="hint">ข้อมูลทั้งหมดเก็บในเบราว์เซอร์เครื่องนี้ ควรกดสำรองเป็นไฟล์เป็นระยะ โดยเฉพาะก่อนล้างข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่อง</p>
    <div class="row"><button class="btn pri" data-act="backup">สำรองข้อมูลทั้งหมด (.json)</button><label class="btn" for="restorefile">กู้ข้อมูลจากไฟล์</label><input id="restorefile" type="file" accept=".json,application/json" hidden><button class="btn bad" data-act="wipe" style="margin-left:auto">ล้างข้อมูลทั้งหมด</button></div></div>`;
 }

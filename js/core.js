@@ -48,10 +48,10 @@ async function fileToImage(file,max,q){
   return{url:c.toDataURL('image/jpeg',q||.85),w:cw,h:ch};
 }
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('โหลดไลบรารีไม่ได้'));document.head.appendChild(s)})}
-async function pdfToImages(file){
+async function pdfToImages(file,maxPages,cb){
   if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
-  const buf=await file.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:buf}).promise;const out=[];
-  for(let n=1;n<=Math.min(pdf.numPages,6);n++){const pg=await pdf.getPage(n);const v0=pg.getViewport({scale:1});const sc=Math.min(3,2800/Math.max(v0.width,v0.height));const vp=pg.getViewport({scale:sc});
+  const buf=await file.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:buf}).promise;const out=[];const lim=Math.min(pdf.numPages,maxPages||6);const big=lim>12?2200:2800;
+  for(let n=1;n<=lim;n++){if(cb)cb(n,lim);const pg=await pdf.getPage(n);const v0=pg.getViewport({scale:1});const sc=Math.min(3,big/Math.max(v0.width,v0.height));const vp=pg.getViewport({scale:sc});
     const c=document.createElement('canvas');c.width=Math.round(vp.width);c.height=Math.round(vp.height);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
     await pg.render({canvasContext:x,viewport:vp}).promise;out.push({url:c.toDataURL('image/jpeg',.9),w:c.width,h:c.height,page:n,pages:pdf.numPages})}
   return out;
@@ -264,14 +264,18 @@ function openBoard(cfg){
   /* pointer handling */
   svg.addEventListener('wheel',e=>{e.preventDefault();const p=toPt(e);zoomAt(e.deltaY>0?1.15:1/1.15,p[0],p[1])},{passive:false});
   svg.addEventListener('pointerdown',e=>{
-    svg.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(ptrs.size===2){const a=[...ptrs.values()];pinch={d:Math.hypot(a[0].x-a[1].x,a[1].y-a[0].y),view:{...view},mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2};drag=null;if(draft&&draft.t!=='poly')draft=null;return}
+    try{svg.setPointerCapture(e.pointerId)}catch(x){}
+    if(e.isPrimary)ptrs.clear();   // กันตัวชี้ค้างจากนิ้วที่ระบบกลืน event ไป ทำให้ซูมเพี้ยนด้วยนิ้วเดียว
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(ptrs.size===2){if(drag){if(drag.m==='pin'&&drag.moved&&drag.orig){const d0=defectById(drag.id);if(d0&&d0.loc){d0.loc.x=drag.orig.x;d0.loc.y=drag.orig.y}}else if((drag.m==='move'||drag.m==='vtx')&&undo.length){shapes.splice(0,shapes.length,...JSON.parse(undo.pop()))}redraw()}
+      const a=[...ptrs.values()];pinch={d:Math.hypot(a[0].x-a[1].x,a[1].y-a[0].y),view:{...view},mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2};drag=null;if(draft&&draft.t!=='poly')draft=null;return}
     const p=toPt(e);const t=e.target;const vi=t.closest&&t.closest('[data-v]');const si=t.closest&&t.closest('[data-i]');let pi=t.closest&&t.closest('[data-pin]');
-    if(!pi&&(ro||tool==='select'||tool==='pan')){const hp=hitPin(p);if(hp!=null)pi={dataset:{pin:hp}}}
+    if(!pi&&(ro||tool==='select'||tool==='pan')){const hp=hitPin(p);if(hp!=null)pi={dataset:{pin:hp},far:true}}
     if(ro){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view},pinId:pi?pi.dataset.pin:null};return}
     if(e.button===1||tool==='pan'){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view},pinId:pi?pi.dataset.pin:null};return}
     if(tool==='select'){
       if(vi&&sel>=0){pushUndo();drag={m:'vtx',k:+vi.dataset.v};return}
+      if(pi&&pi.far){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view},pinId:pi.dataset.pin};return}
       if(pi&&(typeof cfg.pinLock==='function'?cfg.pinLock(pi.dataset.pin):cfg.pinLock)){cfg.onPinClick&&cfg.onPinClick(pi.dataset.pin,redraw);return}
       if(pi){const d=(cfg.pinObj||defectById)(pi.dataset.pin);drag={m:'pin',id:pi.dataset.pin,sx:p[0],sy:p[1],moved:false,orig:d&&d.loc?{x:d.loc.x,y:d.loc.y}:null};return}
       if(si){const i=+si.dataset.i;select(i);pushUndo();drag={m:'move',sx:p[0],sy:p[1],orig:clone(shapes[i]),moved:false};return}
@@ -321,7 +325,8 @@ function openBoard(cfg){
     if(d.t==='arrow')return{t:'arrow',x1:d.x0,y1:d.y0,x2:d.x1,y2:d.y1,c:color,sw};
   }
   function up(e){
-    ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;
+    ptrs.delete(e.pointerId);
+    if(pinch&&ptrs.size<2){pinch=null;if(ptrs.size===1){const q=[...ptrs.values()][0];drag={m:'pan',sx:q.x,sy:q.y,v:{...view},pinId:null,moved:true}}return}
     if(!drag){return}
     const dm=drag;drag=null;
     if(dm.m==='draw'&&draft){const d=draft;draft=null;

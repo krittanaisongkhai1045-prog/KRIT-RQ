@@ -101,6 +101,7 @@ async function onMainChange(e){
 async function doBackup(){
   toast('กำลังรวบรวมรูปทั้งหมด…',3000);
   const ids=[...projectImageIds(),...qcImageIds()];S.requests.forEach(r=>ids.push(...reqImageIds(r)));
+  if(MODE.kind!=='cloud')S.library.forEach(l=>l.srcId&&ids.push(l.srcId));   // ไฟล์ DWG (โหมดคลาวด์เก็บบน Storage อยู่แล้ว ไม่ใส่ในไฟล์สำรอง)
   await ensureData([...new Set(ids)]);
   const images={};[...new Set(ids)].forEach(id=>{const v=IMGDATA.get(id)||IMG.get(id);if(v&&String(v).startsWith('data:'))images[id]=v});
   const blob=new Blob([JSON.stringify({v:1,state:S,images})],{type:'application/json'});

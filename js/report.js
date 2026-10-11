@@ -159,11 +159,13 @@ function defectPagesHTML(r){
   }
   return pages;
 }
+/* รูป DEFECT ที่แสดงในรายการ DEFECT แล้ว ไม่ต้องซ้ำในหน้ารูปประกอบ */
+function shownDefectPhotoIds(r){const s=new Set();visibleDefects(r).forEach(d=>{const x=defectPhotos(r,d);if(x.before)s.add(x.before.id);if(x.after)s.add(x.after.id)});return s}
 function photoPagesHTML(r){
-  const pages=[];const ph=r.photos;
+  const pages=[];const shown=shownDefectPhotoIds(r);const ph=r.photos.filter(p=>!shown.has(p.id));
   for(let i=0;i<ph.length;i+=4){
     const cells=ph.slice(i,i+4).map((p,k)=>{const d=p.defectId&&defectById(p.defectId);
-      return`<div class="pcell"><div class="im">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="cp"><b>รูปที่ ${i+k+1}</b>${d?`<span class="tag">${esc(pinLabel(d))}</span>`:''}${p.stage?`<span class="tag">${p.stage==='before'?'ก่อนแก้':'หลังแก้'}</span>`:''} ${esc(p.caption||'')}</div></div>`}).join('');
+      return`<div class="pcell"><div class="im">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="cp"><b>รูปที่ ${r.photos.indexOf(p)+1}</b>${d?`<span class="tag">${esc(pinLabel(d))}</span>`:''}${p.stage?`<span class="tag">${p.stage==='before'?'ก่อนแก้':'หลังแก้'}</span>`:''} ${esc(p.caption||'')}</div></div>`}).join('');
     pages.push(`<div class="pg">${pageHead(r,'รูปประกอบการตรวจสอบ',`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${fmtDate(r.date)}`)}<div class="pgrid">${cells}</div><div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`);
   }
   return pages;
