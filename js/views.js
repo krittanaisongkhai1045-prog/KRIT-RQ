@@ -6,15 +6,28 @@ function setPath(o,p,v){const ks=p.split('.');let t=o;for(let i=0;i<ks.length-1;
 const nsObj=ns=>ns==='r'?curReq():ns==='p'?S.project:null;
 function inp(label,b,type='text',extra=''){const[ns,path]=b.split(':');const v=getPath(nsObj(ns),path);return`<label class="f">${label}<input type="${type}" data-b="${b}" value="${esc(v)}" ${extra}></label>`}
 function ta(label,b,rows=3){const[ns,path]=b.split(':');return`<label class="f">${label}<textarea data-b="${b}" rows="${rows}">${esc(getPath(nsObj(ns),path))}</textarea></label>`}
+const DEF_KINDS=[{id:'CM OPEN',label:'CM OPEN',role:'open'},{id:'CM CLOSE',label:'CM CLOSE',role:'close'}];
+const kindsOf=()=>(S.project.kinds&&S.project.kinds.length?S.project.kinds:DEF_KINDS);
+const kindLabel=r=>r.kindLabel||(r.type==='OPEN'?'CM OPEN':'CM CLOSE');
+function parseKinds(text){
+  const out=[];text.split('\n').forEach(l=>{const[a,b]=l.split('|').map(x=>x.trim());if(!a)return;out.push({id:a,label:a,role:/close|ปิด|ซ้ำ/i.test(b||'')?'close':'open'})});
+  if(!out.some(k=>k.role==='open'))out.unshift(DEF_KINDS[0]);if(!out.some(k=>k.role==='close'))out.push(DEF_KINDS[1]);return out;
+}
+function pickKind(role,cb){
+  const ks=kindsOf().filter(k=>k.role===role);
+  if(ks.length<=1)return cb(ks[0]||DEF_KINDS.find(k=>k.role===role));
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">${role==='open'?'เลือกประเภทการส่งตรวจ':'เลือกประเภทการส่งซ้ำ'}</h3>${ks.map(k=>`<button class="pickrow" data-k="${esc(k.id)}"><b>${esc(k.label)}</b></button>`).join('')}<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-k="">ยกเลิก</button></div></div>`,'modal');
+  o.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==o)return;o.remove();if(b&&b.dataset.k)cb(ks.find(k=>k.id===b.dataset.k))});
+}
 function go(route,id,tab){UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
 
 function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
 function render(){
   document.body.classList.toggle('ro',MODE.ro);
-  const modeChip=MODE.ro?'<span class="chip warn">ดูอย่างเดียว</span>':MODE.kind==='cloud'?'<span class="chip good">ผู้แก้ไข · ซิงก์ทุกคน</span>':'';
+  const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
    <nav class="nav">${[['list','รายการส่งตรวจ'],['defects','DEFECT ตามใบตรวจ'],['qc','QC Before/After'],['site','แบบหน้างาน'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล']].map(n=>`<button data-go="${n[0]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}">${n[1]}</button>`).join('')}</nav>
-   ${modeChip}${MODE.loginUi?(MODE.owner?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบผู้แก้ไข</button>`):''}<span class="small muted" id="savestate">${MODE.ro?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
+   ${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
   const m=$('#main');
   if(UI.route==='list')m.innerHTML=viewList();
   else if(UI.route==='defects')m.innerHTML=viewDefects();
@@ -31,10 +44,10 @@ function chip(t,c){return`<span class="chip ${c||''}">${esc(t)}</span>`}
 function chainBlock(root,match){
   const reqs=chainReqs(root.id);if(!reqs.some(match))return'';
   const cs=chainState(root.id);const can=cs.open>0;
-  let h=`<div class="chain"><div class="chainhead">${chip(cs.t,cs.k)}<span class="muted">${esc(root.workType)} · ${esc(root.location)}</span><span style="margin-left:auto" class="row">${can?`<button class="btn sm pri" data-act="newclose" data-id="${root.id}">＋ สร้างรอบ CLOSE (${cs.open} จุด)</button>`:''}<button class="btn sm" data-act="delchain" data-id="${root.id}">ลบชุดนี้</button></span></div>`;
+  let h=`<div class="chain"><div class="chainhead">${chip(cs.t,cs.k)}<span class="muted">${esc(root.workType)} · ${esc(root.location)}</span><span style="margin-left:auto" class="row">${can?`<button class="btn sm pri" data-act="newclose" data-id="${root.id}">＋ สร้างรอบส่งซ้ำ (${cs.open} จุด)</button>`:''}<button class="btn sm" data-act="delchain" data-id="${root.id}">ลบชุดนี้</button></span></div>`;
   for(const r of reqs){
     const vis=visibleDefects(r).length;
-    h+=`<div class="crow ${r.type==='CLOSE'?'sub':''}" data-act="openreq" data-id="${r.id}"><div><div class="no">${esc(r.no)}</div>${chip(r.type==='OPEN'?'CM OPEN':'CM CLOSE รอบ '+r.round,r.type==='OPEN'?'open':'close')}</div><div class="ttl"><div>${esc(r.workText||'—')}</div><div class="small muted">${fmtDate(r.date)} · ${esc(r.location)} · รูป ${r.photos.length} · ${r.type==='CLOSE'?`ตรวจซ้ำ ${(r.scope||[]).length} จุด`:`พบ DEFECT ${vis} จุด`}</div></div><div class="row">${r.sent?chip('ส่งแล้ว','warn'):chip('ร่าง')}${r.result==='approved'?chip('Approved','good'):r.result==='disapproved'?chip('Disapproved','bad'):r.result==='other'?chip('Other'):''}</div></div>`}
+    h+=`<div class="crow ${r.type==='CLOSE'?'sub':''}" data-act="openreq" data-id="${r.id}"><div><div class="no">${esc(r.no)}</div>${chip(r.type==='OPEN'?kindLabel(r):kindLabel(r)+' รอบ '+r.round,r.type==='OPEN'?'open':'close')}</div><div class="ttl"><div>${esc(r.workText||'—')}</div><div class="small muted">${fmtDate(r.date)} · ${esc(r.location)} · รูป ${r.photos.length} · ${r.type==='CLOSE'?`ตรวจซ้ำ ${(r.scope||[]).length} จุด`:`พบ DEFECT ${vis} จุด`}</div></div><div class="row">${r.sent?chip('ส่งแล้ว','warn'):chip('ร่าง')}${r.result==='approved'?chip('Approved','good'):r.result==='disapproved'?chip('Disapproved','bad'):r.result==='other'?chip('Other'):''}</div></div>`}
   return h+`</div>`;
 }
 function groupKeys(root,g){
@@ -47,7 +60,7 @@ function viewList(){
   const match=r=>!q||[r.no,r.workText,r.workType,r.location,r.building].join(' ').toLowerCase().includes(q);
   const all=S.defects.filter(d=>!d.qc).map(defectStatus);
   const stats=`<div class="stats"><div><b>${roots.length}</b><span>ชุดงานส่งตรวจ</span></div><div><b style="color:var(--bad)">${all.filter(s=>s==='open').length}</b><span>DEFECT ต้องแก้</span></div><div><b style="color:var(--warn)">${all.filter(s=>s==='submitted').length}</b><span>ส่ง CLOSE แล้ว รอผล</span></div><div><b style="color:var(--good)">${all.filter(s=>s==='closed').length}</b><span>ปิดแล้ว</span></div></div>`;
-  let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">รายการส่งตรวจ</h1><label class="row small muted" style="gap:6px">จัดกลุ่มตาม<select id="grp" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','ชนิดงาน'],['both','อาคาร › ชนิดงาน'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label><input type="search" id="q" placeholder="ค้นหาเลขที่ / อาคาร / งาน" value="${esc(UI.q)}" style="width:220px"><button class="btn pri" data-act="newopen">＋ ส่งตรวจใหม่ (CM OPEN)</button></div>${stats}`;
+  let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">รายการส่งตรวจ</h1><label class="row small muted" style="gap:6px">จัดกลุ่มตาม<select id="grp" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','ชนิดงาน'],['both','อาคาร › ชนิดงาน'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label><input type="search" id="q" placeholder="ค้นหาเลขที่ / อาคาร / งาน" value="${esc(UI.q)}" style="width:220px">${canCreate()?'<button class="btn pri" data-act="newopen">＋ ส่งตรวจใหม่</button>':''}</div>${stats}`;
   const vis=roots.filter(rt=>chainReqs(rt.id).some(match));
   if(!vis.length)return h+`<div class="empty">${S.requests.length?'ไม่มีรายการที่ตรงกับคำค้น':MODE.ro?'ยังไม่มีข้อมูลในระบบ':'ยังไม่มีรายการ กด “ส่งตรวจใหม่” เพื่อสร้างใบตรวจฉบับแรก'}</div>`;
   const tree=new Map();
@@ -60,24 +73,24 @@ function viewList(){
 }
 
 /* ========= requests: create ========= */
-function newOpen(){
+function newOpen(num0,kind){
   const p=S.project;const last=[...S.requests].sort((a,b)=>b.created-a.created)[0];
-  const num=p.nextNo++;const id='rq'+uid();
+  const num=num0!=null?num0:p.nextNo++;const id='rq'+uid();
   const r={id,rootId:id,type:'OPEN',round:0,num,no:p.prefix+num,date:todayISO(),planDate:todayISO(),planTime:'',bookNo:'',
     workText:last?last.workText:'',workType:last?last.workType:p.workType,location:last?last.location:'',building:last?last.building:'',floor:'',level:'',strength:'',slump:'',refDwg:'',
-    structure:{other:true},checklist:{},plans:[],photos:[],scope:[],res:{},result:'',notes:'',sent:false,requestedName:p.requestedName,created:Date.now()};
+    kindLabel:kind?kind.label:'CM OPEN',cover:null,structure:{other:true},checklist:{},plans:[],photos:[],scope:[],res:{},result:'',notes:'',sent:false,requestedName:p.requestedName,created:Date.now()};
   S.requests.push(r);save();return r;
 }
-function makeClose(rid){
+function makeClose(rid,num0,kind){
   const reqs=chainReqs(rid);const base=reqs[0],prev=reqs[reqs.length-1];const p=S.project;
   const open=chainDefects(rid).filter(d=>defectStatus(d)!=='closed');
-  const round=reqs.filter(x=>x.type==='CLOSE').length+1;const num=p.nextNo++;const id='rq'+uid();
+  const round=reqs.filter(x=>x.type==='CLOSE').length+1;const num=num0!=null?num0:p.nextNo++;const id='rq'+uid();
   const items=new Set(open.map(d=>d.item).filter(Boolean));
   const cl=clone(prev.checklist||{});for(const k of Object.keys(cl))cl[k].sel=items.has(k);
   items.forEach(k=>{cl[k]=cl[k]||{};cl[k].sel=true});
   const r={id,rootId:rid,parentId:prev.id,type:'CLOSE',round,num,no:p.prefix+num,date:todayISO(),planDate:todayISO(),planTime:'',bookNo:'',
     workText:base.workText,workType:base.workType,location:base.location,building:base.building,floor:base.floor,level:base.level,strength:'',slump:'',refDwg:base.refDwg,
-    structure:clone(base.structure||{}),checklist:cl,
+    kindLabel:kind?kind.label:'CM CLOSE',cover:prev.cover?{...clone(prev.cover)}:null,structure:clone(base.structure||{}),checklist:cl,
     plans:(prev.plans||[]).map(pl=>({...clone(pl),id:'pl'+uid(),shapes:(pl.shapes||[]).map(s=>s.t==='poly'?{...clone(s),ref:true}:clone(s))})),
     photos:[],scope:open.map(d=>d.id),res:{},result:'',notes:'',sent:false,requestedName:base.requestedName,created:Date.now()};
   S.requests.push(r);save();return r;
@@ -133,7 +146,8 @@ function editDefect(d,ctx){
      ${d.loc?`<span class="chip good">มีหมุดบนแบบแล้ว</span>`:`<span class="chip warn">ยังไม่ปักหมุด</span>`}
      ${ctx.canDelete?`<button class="btn bad" style="margin-left:auto" data-x="del">ลบ DEFECT</button>`:''}
    </div></div>`,'modal');
-  if(MODE.ro){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del]',o).forEach(x=>x.remove())}
+  const RO=MODE.ro||!canEditDefect(d);o.dataset.ro=RO?'1':'0';
+  if(RO){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del]',o).forEach(x=>x.remove())}
   const gbox=$('#gbox',o);
   function drawGrid(){const g=d.grid;if(!g||!g.cols){gbox.innerHTML='<div class="empty small">ยังไม่ได้สร้างผังกระเบื้อง (ข้ามได้ถ้าไม่จำเป็น)</div>';return}
     gbox.innerHTML=`<div class="gsvg-wrap">${gridSvg(g).replace('<svg','<svg class="gsvg" id="gsvg"')}</div><p class="small muted" style="margin:6px 0 0">${g.cols} คอลัมน์ × ${g.rows} แถว · เลือกอยู่ ${g.cells.length} แผ่น ${g.cells.length?'· '+esc(gridText(g)):''}</p>`}
@@ -143,7 +157,7 @@ function editDefect(d,ctx){
     if(t.dataset.g){d.grid=d.grid||{cells:[]};d.grid[t.dataset.g]=t.type==='number'?(+t.value||0):t.value;save()}});
   o.addEventListener('click',e=>{
     const svgEl=e.target.closest('#gsvg');
-    if(svgEl){if(MODE.ro)return;const g=d.grid;const r=svgEl.getBoundingClientRect();const vb=svgEl.viewBox.baseVal;const x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
+    if(svgEl){if(RO)return;const g=d.grid;const r=svgEl.getBoundingClientRect();const vb=svgEl.viewBox.baseVal;const x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
       const c=Math.floor(x/20)+1,row=g.rows-Math.floor(y/20);if(c<1||c>g.cols||row<1||row>g.rows)return;const k=c+','+row;const i=g.cells.indexOf(k);i>=0?g.cells.splice(i,1):g.cells.push(k);save();drawGrid();return}
     const b=e.target.closest('[data-x]');if(b){const x=b.dataset.x;
       if(x==='close'||e.target===o){o.remove();ctx.after&&ctx.after(true);return}
@@ -163,11 +177,15 @@ function newDefect(r,loc){
 }
 
 /* ========= request editor ========= */
+const REQ_ST=[['draft','ร่าง'],['sent','ส่งตรวจแล้ว · รอผล'],['approved','ผ่าน (Approved)'],['disapproved','ไม่ผ่าน (Disapproved)'],['cancelled','ยกเลิก']];
+const reqStatus=r=>r.cancelled?'cancelled':r.result==='approved'?'approved':r.result==='disapproved'?'disapproved':r.sent?'sent':'draft';
+function setReqStatus(r,v){r.cancelled=v==='cancelled';r.sent=v==='sent'||v==='approved'||v==='disapproved';r.result=v==='approved'?'approved':v==='disapproved'?'disapproved':''}
 function viewReq(){
   const r=curReq();const cs=chainState(rootId(r));const tabs=[['info','ข้อมูลเอกสาร'],['plans','แบบ / ขอบเขต',r.plans.length],['photos','รูปตรวจ',r.photos.length,r.photos.length>=4?'good':'bad'],['defects','DEFECT',visibleDefects(r).length],['preview','เอกสารพร้อมส่ง']];
-  return`<div class="row" style="margin-bottom:10px"><button class="btn sm" data-go="list">← รายการ</button><h1 style="font-size:20px" class="mono">${esc(r.no)}</h1>${chip(r.type==='OPEN'?'CM OPEN':'CM CLOSE รอบ '+r.round,r.type==='OPEN'?'open':'close')}${chip(cs.t,cs.k)}
-   <span style="margin-left:auto" class="row"><label class="chk"><input type="checkbox" data-b="r:sent" ${r.sent?'checked':''} data-re="1"> ส่งตรวจแล้ว</label>${r.type==='OPEN'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ สร้างรอบ CLOSE</button>`:r.type==='CLOSE'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ รอบ CLOSE ถัดไป</button>`:''}</span></div>
-   ${r.type==='CLOSE'?`<div class="banner info">รอบ CLOSE ที่ ${r.round} · ตรวจซ้ำเฉพาะ ${(r.scope||[]).length} จุดที่แก้ไข (อ้างอิงใบ CM OPEN ${esc(reqById(rootId(r)).no)}) · แบบจะแสดงเฉพาะหมุด DEFECT ของจุดที่แก้</div>`:''}
+  return`<div class="row" style="margin-bottom:10px"><button class="btn sm" data-go="list">← รายการ</button><h1 style="font-size:20px" class="mono">${esc(r.no)}</h1>${chip(r.type==='OPEN'?kindLabel(r):kindLabel(r)+' รอบ '+r.round,r.type==='OPEN'?'open':'close')}${chip(cs.t,cs.k)}
+   <span style="margin-left:auto" class="row"><label class="row small muted" style="gap:6px">สถานะเอกสาร<select data-reqstatus="1" style="width:auto;color:var(--fg)">${REQ_ST.map(o=>`<option value="${o[0]}" ${reqStatus(r)===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${r.type==='OPEN'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ สร้างรอบส่งซ้ำ</button>`:r.type==='CLOSE'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ รอบส่งซ้ำถัดไป</button>`:''}</span></div>
+   ${MODE.kind==='cloud'?`<div class="row small" style="margin-bottom:10px;gap:6px">${aclSummary('requests',rootId(r))}</div>`:''}
+   ${r.type==='CLOSE'?`<div class="banner info">รอบ ${esc(kindLabel(r))} ที่ ${r.round} · ตรวจซ้ำเฉพาะ ${(r.scope||[]).length} จุดที่แก้ไข (อ้างอิงใบ ${esc(kindLabel(reqById(rootId(r))))} ${esc(reqById(rootId(r)).no)}) · แบบจะแสดงเฉพาะหมุด DEFECT ของจุดที่แก้</div>`:''}
    <div class="tabs" role="tablist">${tabs.map(t=>`<button role="tab" data-tab="${t[0]}" aria-selected="${UI.tab===t[0]}">${t[1]}${t[2]!=null?`<span class="n ${t[3]||''}">${t[2]}${t[0]==='photos'?'/4':''}</span>`:''}</button>`).join('')}</div>
    <div id="tabbody">${UI.tab==='info'?tabInfo(r):UI.tab==='plans'?tabPlans(r):UI.tab==='photos'?tabPhotos(r):UI.tab==='defects'?tabDefects(r):tabPreview(r)}</div>`;
 }
@@ -182,8 +200,9 @@ function cell(r,id){return r.checklist[id]||(r.checklist[id]={})}
 function tabInfo(r){
   const P=S.project;const isC=r.type==='CLOSE';
   let h=`<div class="panel"><h3>เลขที่และวันที่</h3><div class="grid">${inp('เลขที่ใบตรวจ (Request No.)','r:no')}${inp('หนังสือเล่มที่','r:bookNo')}${inp('วันที่ทำเอกสาร','r:date','date')}${inp('วันที่นัดตรวจ','r:planDate','date')}${inp('เวลานัดตรวจ','r:planTime','text','placeholder="10.30 AM."')}</div></div>
-  <div class="panel"><h3>งานที่ส่งตรวจ <span class="chip ${isC?'close':'open'}">${isC?'CM CLOSE':'CM OPEN'}</span></h3><div class="grid g2">
-   <label class="f">ชนิดงานที่ตรวจสอบ — ต่อท้าย “${isC?'CM CLOSE':'CM OPEN'}”<input type="text" data-b="r:workText" value="${esc(r.workText)}" placeholder="F8 BUILDING 1 FLOOR 01-11"></label>
+  <div class="panel"><h3>งานที่ส่งตรวจ <span class="chip ${isC?'close':'open'}">${esc(kindLabel(r))}</span></h3><div class="grid g2">
+   <label class="f">ประเภทการส่ง (พิมพ์เองได้ เช่น CM OPEN / CM CLOSE / Pre-Inspection)<input type="text" data-b="r:kindLabel" value="${esc(kindLabel(r))}" list="kindlist"><datalist id="kindlist">${kindsOf().filter(k=>k.role===(isC?'close':'open')).map(k=>`<option>${esc(k.label)}</option>`).join('')}</datalist></label>
+   <label class="f">ชนิดงานที่ตรวจสอบ — ต่อท้าย “${esc(kindLabel(r))}”<input type="text" data-b="r:workText" value="${esc(r.workText)}" placeholder="F8 BUILDING 1 FLOOR 01-11"></label>
    ${inp('งาน (ภาษาไทย)','r:workType')}${inp('Location / บริเวณที่ทำงาน','r:location','text','placeholder="BUILDING E"')}${inp('Reference Shop Drawing No.','r:refDwg')}</div>
    <div class="row" style="margin:12px 0 4px;gap:14px">${STRUCT.map(s=>`<label class="chk"><input type="checkbox" data-b="r:structure.${s[0]}" ${r.structure&&r.structure[s[0]]?'checked':''}> ${s[1]}</label>`).join('')}</div>
    <div class="grid" style="margin-top:10px">${inp('อาคาร','r:building')}${inp('ชั้น','r:floor')}${inp('ระดับ (Level)','r:level')}${inp('Concrete Strength','r:strength')}${inp('Slump','r:slump')}</div></div>`;
@@ -208,8 +227,24 @@ function tabInfo(r){
 
 /* --- plans --- */
 function planPins(r,pl){return visibleDefects(r).filter(d=>d.loc&&d.loc.planKey===pl.key).map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:pinStateFor(r,d)}))}
+function coverSection(r){
+  const c=r.cover;const legacy=c===undefined&&r.plans.length;
+  let h=`<div class="panel" style="margin:0 0 14px"><h3>แบบสำหรับใบปะหน้า <span class="small muted" style="font-weight:400">แยกจากแบบที่แนบท้ายเอกสารด้านล่าง</span></h3>`;
+  if(c){h+=`<div class="row" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><div class="card" style="width:270px;flex:none"><div class="thumb" style="aspect-ratio:2/1" data-act="covopen">${annotatedSvg(imgSrc(c.imgId),c.w,c.h,c.shapes||[],[],{viewBox:focusBox(c,[]),labels:false})}</div></div>
+    <div class="grow" style="display:flex;flex-direction:column;gap:8px;min-width:220px"><input type="text" data-cover="name" value="${esc(c.name||'')}" placeholder="ชื่อแบบ (แสดงใต้รูปในใบปะหน้า)" aria-label="ชื่อแบบปก">
+     <div class="row"><button class="btn pri sm" data-act="covopen">ทำสี / ระบุขอบเขตบนแบบปก</button><button class="btn sm" data-act="covpick">เปลี่ยนแบบ</button><button class="btn sm bad" data-act="covdel">ลบแบบปก</button></div>
+     <p class="hint" style="margin:0">รูปนี้อยู่เฉพาะในกรอบใบปะหน้า ไม่ถูกพิมพ์เป็นหน้าแบบ · ระบบซูมให้พอดีกับโซนสีที่วาด</p></div></div>`}
+  else{h+=`<p class="hint">${legacy?'เอกสารนี้ยังใช้แบบแรกที่แนบเป็นแบบปกโดยอัตโนมัติ กดปุ่มด้านล่างเพื่อแยกเป็นแบบปกของตัวเอง':'ยังไม่ได้ตั้งแบบปก ใบปะหน้าจะเว้นกรอบนี้ไว้'}</p>
+    <div class="row"><button class="btn pri sm" data-act="covpick">เลือกจากคลัง / อัปโหลดแบบปก</button>${r.plans.length?'<button class="btn sm" data-act="covfrom">คัดลอกจากแบบที่แนบ</button>':''}</div>`}
+  return h+`</div>`;
+}
+function setCover(r,lib){const old=r.cover;r.cover={libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:old&&old.w===lib.w&&old.h===lib.h?old.shapes:[]};save()}
+function openCover(r){
+  const c=r.cover;if(!c)return;
+  openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,onChange:save,onClose:()=>refreshTab()});
+}
 function tabPlans(r){
-  let h=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ และปักหมุดตำแหน่ง DEFECT</span></div>`;
+  let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ และปักหมุดตำแหน่ง DEFECT</span></div>`;
   if(!r.plans.length)return h+`<div class="empty">ยังไม่มีแบบในใบนี้<br>อัปโหลดแบบผัง (รูปหรือ PDF) หรือวางรูป (Ctrl+V) ที่แคปมาจากแบบ แล้ววาดโซนสีบนแบบได้เลย</div>`;
   h+=`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">`;
   for(const pl of r.plans){
@@ -230,14 +265,14 @@ async function importPlanFiles(files){
   return libs;
 }
 function attachPlan(r,lib){const key='pk'+uid();r.plans.push({id:'pl'+uid(),key,libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:[]});save()}
-function planPicker(r){
+function planPicker(r,cb){
   const o=overlay(`<div class="box wide"><div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">เพิ่มแบบเข้าใบตรวจ</h3><button class="btn" data-x="close">ปิด</button></div>
    <div class="row" style="margin-bottom:12px"><label class="btn pri" for="planfile">อัปโหลดแบบใหม่ (รูป / PDF)</label><input id="planfile" type="file" accept="image/*,application/pdf" multiple hidden><span class="hint" style="margin:0">แบบที่อัปโหลดจะเก็บไว้ในคลัง ใช้ซ้ำได้ทุกใบตรวจ</span></div>
    <div id="libgrid" class="cards"></div></div>`,'modal');
   const draw=()=>{$('#libgrid',o).innerHTML=S.library.length?S.library.map(l=>`<button class="pickrow" style="flex-direction:column;align-items:stretch" data-lib="${l.id}"><div style="aspect-ratio:4/3;background:var(--surface2);border-radius:6px;overflow:hidden">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><b class="small">${esc(l.name)}</b></button>`).join(''):'<div class="empty">คลังแบบว่าง — อัปโหลดแบบแรกได้เลย</div>'};draw();
   o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]')){o.remove();return}
-    const b=e.target.closest('[data-lib]');if(b){const l=S.library.find(x=>x.id===b.dataset.lib);attachPlan(r,l);o.remove();refreshTab();toast('เพิ่มแบบแล้ว')}});
-  o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files]);if(libs.length){libs.forEach(l=>attachPlan(r,l));o.remove();refreshTab();save();toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว')}}});
+    const b=e.target.closest('[data-lib]');if(b){const l=S.library.find(x=>x.id===b.dataset.lib);if(cb)cb(l);else{attachPlan(r,l);toast('เพิ่มแบบแล้ว')}o.remove();refreshTab()}});
+  o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files]);if(libs.length){if(cb)cb(libs[0]);else{libs.forEach(l=>attachPlan(r,l));toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว')}o.remove();refreshTab();save()}}});
 }
 function openPlan(r,pl,pinFor){
   const board=openBoard({kind:'plan',ro:MODE.ro,title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,
@@ -328,15 +363,20 @@ function drawPreview(){
 }
 
 /* ========= settings ========= */
+function sigCard(P,title,nameB,roleB,key){
+  return`<div class="sigc"><b>${title}</b>${inp('ชื่อ',nameB)}${inp('ตำแหน่ง',roleB)}<div class="sigv">${P[key]?`<img src="${imgSrc(P[key])||''}" alt="ลายเซ็น">`:'<span class="small muted">ไม่มีลายเซ็น</span>'}</div>
+   <div class="row"><label class="btn sm" for="sig-${key}">${P[key]?'เปลี่ยน':'อัปโหลด'}ลายเซ็น</label><input id="sig-${key}" data-sigfor="${key}" type="file" accept="image/*" hidden>${P[key]?`<button class="btn sm" data-act="nosig" data-id="${key}">ลบลายเซ็น</button>`:''}</div></div>`;
+}
 function viewSettings(){
   const P=S.project;
   const cl=P.checklist.map(g=>`<div class="panel" style="margin:0 0 10px"><label class="f">หัวข้อกลุ่ม (ขึ้นบรรทัดใหม่ได้)<textarea data-cg="${g.id}" data-k="label" rows="2">${esc(g.label)}</textarea></label><label class="f" style="margin-top:8px">รายการ (บรรทัดละ 1 รายการ รูปแบบ  English | ไทย)<textarea data-cg="${g.id}" data-k="items" rows="8" style="font-family:var(--f-mono);font-size:13px">${esc(g.items.map(i=>i.en+(i.th?' | '+i.th:'')).join('\n'))}</textarea></label></div>`).join('');
   return`<h1 style="font-size:22px;margin-bottom:14px">ตั้งค่า / สำรองข้อมูล</h1>
   <div class="panel"><h3>โครงการและบริษัท (ขึ้นหัวเอกสารทุกใบ)</h3><div class="grid g2">${inp('ชื่อโครงการ (PROJECT)','p:name')}${inp('LOCATE','p:locate')}${inp('ชื่อบริษัท','p:company.name')}${inp('ที่อยู่ บรรทัด 1','p:company.addr1')}${inp('ที่อยู่ บรรทัด 2','p:company.addr2')}${inp('Owner','p:owner')}${inp('Contractor','p:contractor')}${inp('CM (ช่องผู้ตรวจ)','p:cmName')}</div></div>
   <div class="panel"><h3>เลขที่ใบตรวจ</h3><div class="grid">${inp('คำนำหน้า','p:prefix')}<label class="f">เลขถัดไป<input type="number" data-b="p:nextNo" value="${P.nextNo}"></label>${inp('งานเริ่มต้น','p:workType')}</div><p class="hint" style="margin-top:8px">ตัวอย่างเลขถัดไป: <b class="mono">${esc(P.prefix)}${P.nextNo}</b> ใบ CLOSE ใช้เลขใหม่ต่อจากเลขล่าสุด แก้เลขในใบแต่ละใบได้</p></div>
-  <div class="panel"><h3>ผู้ลงนาม</h3><div class="grid">${inp('Requested by (ชื่อ)','p:requestedName')}${inp('ตำแหน่ง/แผนก','p:requestedRole')}${inp('Site Engineer','p:engName')}${inp('ตำแหน่ง','p:engRole')}${inp('CC (ชื่อ)','p:ccName')}${inp('ตำแหน่ง','p:ccRole')}</div>
-   <div class="row" style="margin-top:14px;gap:22px"><div class="row"><div style="width:90px;height:60px;background:#fff;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center"><img src="${imgSrc(P.logoId)||''}" style="max-height:56px" alt=""></div><label class="btn" for="logofile">เปลี่ยนโลโก้</label><input id="logofile" type="file" accept="image/*" hidden></div>
-   <div class="row"><div style="width:120px;height:60px;background:#fff;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center"><img src="${imgSrc(P.sigId)||''}" style="max-height:56px;max-width:116px" alt=""></div><label class="btn" for="sigfile">เปลี่ยนลายเซ็นของ CC</label><input id="sigfile" type="file" accept="image/*" hidden><button class="btn sm" data-act="nosig">ไม่ใช้ลายเซ็น</button></div></div></div>
+  <div class="panel"><h3>ประเภทการส่งตรวจ</h3><p class="hint">กำหนดชื่อประเภทที่จะพิมพ์ในใบ (บรรทัดละ 1 ประเภท รูปแบบ <b class="mono">ชื่อ | open</b> หรือ <b class="mono">ชื่อ | close</b>)<br><b>open</b> = ส่งตรวจใหม่ (เริ่มชุดเอกสารใหม่) · <b>close</b> = ส่งตรวจซ้ำเพื่อปิด DEFECT (ตรวจเฉพาะจุดที่แก้) · ในแต่ละใบยังพิมพ์ชื่อประเภทเองได้อีก</p><textarea data-kinds="1" rows="4" style="font-family:var(--f-mono);font-size:13px">${esc(kindsOf().map(k=>k.label+' | '+k.role).join('\n'))}</textarea></div>
+  <div class="panel"><h3>ผู้ลงนามและลายเซ็น</h3><p class="hint">ชื่อและตำแหน่งจะขึ้นใต้เส้นลงนามในใบปะหน้า ถ้าอัปโหลดลายเซ็น (พื้นขาวหรือโปร่งใสก็ได้) จะวางเหนือเส้นให้อัตโนมัติ เว้นว่างไว้ถ้าต้องการเซ็นด้วยมือบนกระดาษ</p>
+   <div class="sigs">${sigCard(P,'Requested by (ผู้ขอตรวจ)','p:requestedName','p:requestedRole','reqSigId')}${sigCard(P,'Site Engineer','p:engName','p:engRole','engSigId')}${sigCard(P,'Reviewed by · CC','p:ccName','p:ccRole','sigId')}</div>
+   <div class="row" style="margin-top:14px"><div style="width:90px;height:60px;background:#fff;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center"><img src="${imgSrc(P.logoId)||''}" style="max-height:56px" alt=""></div><label class="btn" for="logofile">เปลี่ยนโลโก้</label><input id="logofile" type="file" accept="image/*" hidden></div></div>
   <div class="panel"><h3>รายการตรวจ (Checklist)</h3><p class="hint">แก้ชื่อ เพิ่ม หรือลบรายการได้ ผลที่กรอกไว้ในใบเดิมไม่หาย (ผูกกับรายการที่ชื่อ English ตรงกัน)</p>${cl}</div>
   <div class="panel"><h3>รายการเลือก DEFECT</h3><div class="grid g2"><label class="f">ประเภท DEFECT (บรรทัดละ 1)<textarea data-list="defectTypes" rows="10">${esc(P.defectTypes.join('\n'))}</textarea></label><label class="f">วิธีแก้เฉพาะจุด (บรรทัดละ 1)<textarea data-list="fixMethods" rows="10">${esc(P.fixMethods.join('\n'))}</textarea></label></div></div>
   <div class="panel"><h3>คลังแบบ (${S.library.length})</h3>${S.library.length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${S.library.map(l=>`<div class="card"><div class="thumb" style="cursor:default">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><div class="body"><input type="text" data-lib="${l.id}" value="${esc(l.name)}" aria-label="ชื่อแบบ"><button class="btn sm bad" data-act="dellib" data-id="${l.id}">ลบออกจากคลัง</button></div></div>`).join('')}</div>`:'<div class="empty small">ยังไม่มีแบบในคลัง เพิ่มจากหน้า “แบบ / ขอบเขต” ในใบตรวจ</div>'}</div>

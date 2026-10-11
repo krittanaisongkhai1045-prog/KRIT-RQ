@@ -5,8 +5,8 @@ const QC_ST={open:['ต้องแก้ไข','bad'],fixed:['แก้แล�
 const qcList=()=>S.defects.filter(d=>d.qc);
 const qcImageIds=()=>qcList().flatMap(d=>[...(d.before||[]),...(d.after||[])].map(p=>p.imgId));
 function qcNext(){const n=qcList().reduce((m,d)=>Math.max(m,d.num||0),0)+1;return{num:n,code:'QC-'+String(n).padStart(3,'0')}}
-function newQC(loc){
-  const n=qcNext();
+function newQC(loc,num0){
+  const n=num0!=null?{num:num0,code:'QC-'+String(num0).padStart(3,'0')}:qcNext();
   const d={id:'df'+uid(),qc:true,rootId:'',foundIn:'',num:n.num,code:n.code,status:'open',building:'',area:'',surface:'',face:'',type:'',desc:'',fix:'',protect:'',due:'',grid:null,loc:loc||null,before:[],after:[],found:todayISO(),fixedOn:'',closedOn:'',created:Date.now()};
   const last=qcList().slice(-1)[0];if(last){d.building=last.building||'';d.area=last.area;d.surface=last.surface}
   S.defects.push(d);save();return d;
@@ -21,7 +21,7 @@ function qcFiltered(){
 
 /* ---------- หน้ารายการ QC ---------- */
 function viewQC(){
-  const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=!MODE.ro;
+  const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
    ${owner?'<button class="btn pri" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF</button><button class="btn" data-act="qchtml">HTML</button></div>
@@ -58,15 +58,16 @@ async function addQCPhotos(d,stage,files){
   if(n){save();toast(`เพิ่มรูป ${n} รูป`)}
 }
 function editQC(d,ctx){
-  ctx=ctx||{};const P=S.project;const ro=MODE.ro;
+  ctx=ctx||{};const P=S.project;const ro=MODE.ro||!canEditDefect(d);
   const opt=(arr,v)=>arr.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
-  const o=overlay('<div class="box wide"></div>','modal');const box=$('.box',o);
+  const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro=ro?'1':'0';const box=$('.box',o);
   const photoCol=(stage,title,cls)=>{const L=d[stage]||[];
     return`<div class="qcol"><div class="row" style="margin-bottom:6px"><b class="tg ${cls}" style="position:static">${title}</b><span class="small muted">${L.length} รูป</span>${ro?'':`<label class="btn sm" for="qf-${stage}" style="margin-left:auto">＋ เพิ่มรูป</label><input id="qf-${stage}" data-qstage="${stage}" type="file" accept="image/*" multiple hidden>`}</div>
      ${L.length?`<div class="qph">${L.map(p=>`<div class="qp"><div class="thumb" data-q="open" data-st="${stage}" data-id="${p.id}">${qcThumb(p)}</div><input type="text" data-qp="${stage}:${p.id}" value="${esc(p.caption)}" placeholder="คำอธิบาย" ${ro?'disabled':''}>${ro?'':`<button class="btn sm bad" data-q="delp" data-st="${stage}" data-id="${p.id}">ลบ</button>`}</div>`).join('')}</div>`:`<div class="empty small">${stage==='before'?'ยังไม่มีรูปก่อนแก้':'ยังไม่มีรูปหลังแก้'}</div>`}</div>`};
   function draw(){
     const st=d.status||'open';const lib=d.loc&&libById(d.loc.libId);
     box.innerHTML=`<div class="row" style="margin-bottom:12px"><h3 style="margin-right:auto">QC DEFECT <span class="mono">${esc(d.code)}</span> ${chip(QC_ST[st][0],QC_ST[st][1])}</h3><button class="btn pri" data-q="close">เสร็จ</button></div>
+     ${MODE.kind==='cloud'?`<div class="row small" style="margin-bottom:10px;gap:6px">${aclSummary('defects',d.id)}</div>`:''}
      <div class="row" style="margin-bottom:12px">${Object.keys(QC_ST).map(k=>`<button class="tool" data-q="st" data-v="${k}" aria-pressed="${st===k}" ${ro?'disabled':''}>${QC_ST[k][0]}</button>`).join('')}
       ${st==='fixed'&&!(d.after||[]).length?'<span class="chip warn">ยังไม่มีรูป After</span>':''}</div>
      <div class="qcols">${photoCol('before','BEFORE · ก่อนแก้','')}${photoCol('after','AFTER · หลังแก้','af')}</div>
@@ -119,7 +120,7 @@ function pickSitePlan(cb){
 
 /* ---------- หน้าแบบหน้างาน ---------- */
 function viewSite(){
-  const owner=!MODE.ro;const lib=[...S.library].sort((a,b)=>String(a.group||'').localeCompare(String(b.group||''),'th',{numeric:true})||String(a.name).localeCompare(String(b.name),'th',{numeric:true}));
+  const owner=canCreate();const lib=[...S.library].sort((a,b)=>String(a.group||'').localeCompare(String(b.group||''),'th',{numeric:true})||String(a.name).localeCompare(String(b.name),'th',{numeric:true}));
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">แบบหน้างาน (ฉบับปัจจุบัน)</h1>${owner?'<label class="btn pri" for="sitefile">＋ อัปโหลดแบบ (รูป / PDF)</label><input id="sitefile" type="file" accept="image/*,application/pdf" multiple hidden>':''}</div>
    <p class="hint" style="margin:0 0 12px">${owner?'อัปโหลดแบบฉบับล่าสุดให้ทีมใช้ที่หน้างาน · เปิดแบบเพื่อวาดโซนสี (บันทึกให้ทุกคนเห็น) และปักหมุด QC DEFECT · เมื่อแบบอัปเดต ใช้ “อัปโหลดฉบับใหม่” เพื่อแทนรูปโดยคงโซนและหมุดเดิม':'แตะแบบเพื่อเปิด ซูม ดูหมุด QC DEFECT และขีดเขียน/วางโซนของตัวเองได้ (เก็บในเครื่องนี้ ไม่ส่งถึงคนอื่น) แล้วกด “บันทึกเป็นรูป” เพื่อแชร์'}</p>`;
   if(!lib.length)return h+`<div class="empty">${owner?'ยังไม่มีแบบ กด “อัปโหลดแบบ” เพื่อเพิ่มแบบฉบับปัจจุบัน':'ยังไม่มีแบบหน้างาน'}</div>`;
@@ -128,24 +129,25 @@ function viewSite(){
     const pins=qcList().filter(d=>d.loc&&d.loc.libId===l.id);const open=pins.filter(d=>d.status!=='closed');const nz=(l.shapes||[]).filter(s=>s.t==='poly').length;
     if(hasGroup&&(l.group||'')!==last)cards+=`<div class="ghead l1" style="grid-column:1/-1;margin-top:10px"><b>${esc(l.group||'ไม่ระบุกลุ่ม')}</b></div>`;last=l.group||'';
     cards+=`<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,l.shapes||[],open.map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status})))}</div><div class="body">
-     ${owner?`<input type="text" data-sl="${l.id}" data-k="name" value="${esc(l.name)}" aria-label="ชื่อแบบ">
+     ${canEditPlan(l)?`<input type="text" data-sl="${l.id}" data-k="name" value="${esc(l.name)}" aria-label="ชื่อแบบ">
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px"><input type="text" data-sl="${l.id}" data-k="rev" value="${esc(l.rev||'')}" placeholder="Rev. เช่น R3" aria-label="revision"><input type="date" data-sl="${l.id}" data-k="date" value="${esc(l.date||'')}" aria-label="วันที่แบบ"></div>
       <input type="text" data-sl="${l.id}" data-k="group" value="${esc(l.group||'')}" placeholder="กลุ่ม เช่น อาคาร A / ชั้น 3" list="sitegrp">`
       :`<b>${esc(l.name)}</b><div class="small muted">${esc([l.rev,l.date&&fmtDate(l.date)].filter(Boolean).join(' · '))}</div>`}
+     ${MODE.kind==='cloud'?`<div class="row small" style="gap:4px">${aclSummary('plans',l.id)}</div>`:''}
      <div class="row small">${open.length?`<span class="chip bad">QC ค้าง ${open.length}</span>`:'<span class="chip good">ไม่มี QC ค้าง</span>'}${nz?`<span class="chip">${nz} โซน</span>`:''}</div>
-     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดแบบ</button>${owner?`<label class="btn sm" for="siterep-${l.id}">อัปโหลดฉบับใหม่</label><input id="siterep-${l.id}" data-rep="${l.id}" type="file" accept="image/*,application/pdf" hidden><button class="btn sm bad" data-act="sitedel" data-id="${l.id}">ลบ</button>`:''}</div></div></div>`;
+     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดแบบ</button>${canEditPlan(l)?`<label class="btn sm" for="siterep-${l.id}">อัปโหลดฉบับใหม่</label><input id="siterep-${l.id}" data-rep="${l.id}" type="file" accept="image/*,application/pdf" hidden>`:''}${isOwnerKey('plans',l.id)?`<button class="btn sm bad" data-act="sitedel" data-id="${l.id}">ลบ</button>`:''}</div></div></div>`;
   }
   return h+`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${cards}</div><datalist id="sitegrp">${[...new Set(S.library.map(l=>l.group).filter(Boolean))].map(g=>`<option>${esc(g)}</option>`).join('')}</datalist>`;
 }
 const SITE_MINE=id=>'sitemine:'+id;
 function openSite(lib,opts){
-  opts=opts||{};const owner=!MODE.ro;let showClosed=!!opts.pinFor;let pinFor=opts.pinFor||null;
+  opts=opts||{};const owner=canEditPlan(lib);const canPin=canCreate();let showClosed=!!opts.pinFor;let pinFor=opts.pinFor||null;
   const U=unitOf(lib.w,lib.h);let shapes;
   if(owner){shapes=lib.shapes||(lib.shapes=[])}
   else{try{shapes=JSON.parse(localStorage.getItem(SITE_MINE(lib.id))||'[]')}catch(e){shapes=[]}}
   const pins=()=>qcList().filter(d=>d.loc&&d.loc.libId===lib.id&&(showClosed||d.status!=='closed')).map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status==='closed'?'closed':d.status==='fixed'?'fixed':'open'}));
-  const board=openBoard({kind:'plan',ro:false,pinLock:!owner,noPin:!owner,title:lib.name+(lib.rev?' · '+lib.rev:''),imgUrl:imgSrc(lib.imgId),w:lib.w,h:lib.h,shapes,pinFor,
-    header:`<button class="btn sm" data-a="tglc">แสดงที่ปิดแล้ว</button><button class="btn sm" data-a="png">บันทึกเป็นรูป</button>${owner?'':'<span class="chip warn">ขีดเขียนเก็บเฉพาะเครื่องนี้</span>'}`,
+  const board=openBoard({kind:'plan',ro:false,stampRO:!canCreate(),pinLock:id=>{const d=defectById(id);return !(d&&canEditDefect(d))},noPin:!canPin,title:lib.name+(lib.rev?' · '+lib.rev:''),imgUrl:imgSrc(lib.imgId),w:lib.w,h:lib.h,shapes,pinFor,
+    header:`<button class="btn sm" data-a="tglc">แสดงที่ปิดแล้ว</button><button class="btn sm" data-a="png">บันทึกเป็นรูป</button>${owner?'':'<span class="chip warn">ขีดเขียนเก็บเฉพาะเครื่องนี้ (ไม่มีสิทธิ์แก้แบบนี้)</span>'}`,
     under:owner?null:()=>(lib.shapes||[]).map((s,i)=>shapeSvg(s,i,U,false)).join(''),
     pins,
     onChange:()=>{if(owner)save();else try{localStorage.setItem(SITE_MINE(lib.id),JSON.stringify(shapes))}catch(e){}},
@@ -153,7 +155,7 @@ function openSite(lib,opts){
     onPinClick:id=>{const d=defectById(id);if(d)editQC(d,{after:()=>board.redraw()})},
     onPinAdd:(x,y)=>{
       if(pinFor){pinFor.loc={libId:lib.id,x,y};save();pinFor=null;board.redraw();toast('ปักหมุดแล้ว กด “เสร็จ” เพื่อกลับ');board.setTool('select');return}
-      const d=newQC({libId:lib.id,x,y});save();board.redraw();editQC(d,{after:()=>board.redraw()})},
+      Promise.resolve(allocNo('qc',1)).then(n=>{const d=newQC({libId:lib.id,x,y},n);save();board.redraw();editQC(d,{after:()=>board.redraw()})}).catch(e=>toast('ขอเลขที่ไม่สำเร็จ: '+((e&&e.message)||e),5000))},
     onAction:async a=>{
       if(a==='tglc'){showClosed=!showClosed;board.redraw();toast(showClosed?'แสดงหมุดที่ปิดแล้ว':'ซ่อนหมุดที่ปิดแล้ว');return}
       if(a==='png'){await sitePng(lib,(lib.shapes||[]).concat(owner?[]:shapes),pins());return}
@@ -236,7 +238,7 @@ async function exportQC(kind){
 
 /* ---------- ตัวจัดการเหตุการณ์ของหน้า QC / แบบหน้างาน ---------- */
 const QCACT={
-  qcnew(){const d=newQC();render();editQC(d,{after:()=>render()})},
+  qcnew(){if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return}Promise.resolve(allocNo('qc',1)).then(n=>{const d=newQC(null,n);render();editQC(d,{after:()=>render()})}).catch(x=>toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000))},
   qcopen(a,id){const d=defectById(id);if(d)editQC(d,{after:()=>render()})},
   qcpdf(){exportQC('pdf')},qchtml(){exportQC('html')},
   siteopen(a,id){const l=libById(id);if(l)openSite(l,{after:()=>render()})},

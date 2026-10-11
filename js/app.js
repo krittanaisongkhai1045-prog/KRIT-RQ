@@ -25,8 +25,16 @@ function onMainClick(e){
   if(QCACT[act]){QCACT[act](a,id,e);return}
   if(MODE.ro&&!['openreq','openplan','openphoto','editdef','pdf','html'].includes(act))return;
   switch(act){
-  case'newopen':{const n=newOpen();go('req',n.id,'info');break}
-  case'newclose':{const n=makeClose(id);toast('สร้างรอบ CLOSE แล้ว ตรวจรายการ DEFECT และเพิ่มรูป “หลังแก้”');go('req',n.id,'defects');break}
+  case'newopen':{if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');break}
+    pickKind('open',k=>Promise.resolve(allocNo('req',S.project.nextNo)).then(v=>{const n=newOpen(v,k);go('req',n.id,'info')}).catch(x=>toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000)));break}
+  case'newclose':{if(!canEditReq(reqById(id))){toast('คุณไม่มีสิทธิ์แก้ไขเอกสารชุดนี้');break}
+    pickKind('close',k=>Promise.resolve(allocNo('req',S.project.nextNo)).then(v=>{const n=makeClose(id,v,k);toast('สร้างรอบส่งซ้ำแล้ว ตรวจรายการ DEFECT และเพิ่มรูป “หลังแก้”');go('req',n.id,'defects')}).catch(x=>toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000)));break}
+  case'covopen':openCover(r);break;
+  case'covpick':planPicker(r,l=>{setCover(r,l)});break;
+  case'covdel':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{r.cover=null;save();refreshTab()});break;
+  case'covfrom':{const useP=pl=>{r.cover={libId:pl.libId||'',name:pl.name,imgId:pl.imgId,w:pl.w,h:pl.h,shapes:clone((pl.shapes||[]).filter(s=>!s.ref))};save();refreshTab();toast('คัดลอกแบบมาเป็นแบบปกแล้ว แก้โซนแยกจากแบบแนบได้')};
+    if(r.plans.length===1)useP(r.plans[0]);else{const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">คัดลอกจากแบบไหน</h3>${r.plans.map(p=>`<button class="pickrow" data-p="${p.id}">${esc(p.name)}</button>`).join('')}</div>`,'modal');
+      o.addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b&&e.target!==o)return;o.remove();if(b)useP(r.plans.find(p=>p.id===b.dataset.p))})}break}
   case'openreq':go('req',id,'info');break;
   case'delchain':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{deleteChain(id);render()});e.stopPropagation();break;
   case'delreq':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{const q=reqById(id);if(q.type==='OPEN')deleteChain(rootId(q));else{S.requests=S.requests.filter(x=>x.id!==id);save()}go('list')});break;
@@ -48,7 +56,7 @@ function onMainClick(e){
     save();refreshTab();break}
   case'pdf':exportPDF();break;
   case'html':exportHTML();break;
-  case'nosig':S.project.sigId='';save();render();break;
+  case'nosig':S.project[id||'sigId']='';save();render();break;
   case'dellib':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.library=S.library.filter(l=>l.id!==id);save();render()});break;
   case'backup':doBackup();break;
   case'wipe':armBtn(a,'กดอีกครั้งเพื่อยืนยันล้างทั้งหมด',async()=>{await wipeAll();render();toast('ล้างข้อมูลแล้ว')});break;
@@ -63,10 +71,14 @@ function onMainInput(e){
   if(t.id==='dq'){UI.dq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewDefects();const q=$('#dq');q.focus();q.setSelectionRange(p,p);return}
   if(t.id==='dfilter'){UI.dfilter=t.value;$('#main').innerHTML=viewDefects();return}
   const r=UI.route==='req'?curReq():null;
+  if(t.dataset.kinds){S.project.kinds=parseKinds(t.value);save();return}
+  if(t.dataset.cover&&r&&r.cover){r.cover[t.dataset.cover]=t.value;save();return}
+  if(t.dataset.reqstatus&&r){setReqStatus(r,t.value);save();render();return}
   if(t.dataset.b){const[ns,path]=t.dataset.b.split(':');const o=nsObj(ns);if(!o)return;
     if(t.type==='radio'){if(!t.checked)return;setPath(o,path,t.value)}
     else setPath(o,path,t.type==='checkbox'?t.checked:t.value);
     if(t.type==='number'&&ns==='p')o[path]=+t.value||0;
+    if(ns==='p'&&path==='nextNo'&&MODE.kind==='cloud'&&MODE.admin)MODE.sb.rpc('set_counter',{p_k:'req',p_next:o[path]});
     save();if(ns==='p'&&path==='name')$('.brand span').textContent=t.value;
     if(t.dataset.re)render();return}
   if(t.dataset.item&&r){const c=cell(r,t.dataset.item);const k=t.dataset.k;c[k]=t.type==='checkbox'?t.checked:t.value;if(k==='sel')t.closest('tr').classList.toggle('sel',t.checked);save();return}
@@ -83,7 +95,7 @@ async function onMainChange(e){
   if(await qcChange(t))return;const r=UI.route==='req'?curReq():null;
   if(MODE.ro)return;
   if(t.id==='photofile'&&r){await addPhotoFiles(r,[...t.files]);t.value='';return}
-  if((t.id==='logofile'||t.id==='sigfile')&&t.files[0]){const im=await fileToImage(t.files[0],700,.9);const id=await putImage(im.url);S.project[t.id==='logofile'?'logoId':'sigId']=id;save();render();return}
+  if((t.id==='logofile'||t.dataset.sigfor)&&t.files[0]){const im=await fileToImage(t.files[0],700,.9);const id=await putImage(im.url);S.project[t.id==='logofile'?'logoId':t.dataset.sigfor]=id;save();render();return}
   if(t.id==='restorefile'&&t.files[0]){await doRestore(t.files[0]);t.value='';return}
 }
 async function doBackup(){
@@ -122,6 +134,7 @@ document.addEventListener('paste',async e=>{
   else if(UI.tab==='plans'){const libs=await importPlanFiles(files);libs.forEach(l=>attachPlan(r,l));refreshTab();toast('เพิ่มแบบแล้ว')}
   else toast('เปิดแท็บ “รูปตรวจ” หรือ “แบบ” ก่อนวางรูป');
 });
+document.addEventListener('click',e=>{const b=e.target.closest('[data-aclbtn]');if(b){const[c,...id]=b.dataset.aclbtn.split('/');aclDialog(c,id.join('/'))}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveNow()});
 window.addEventListener('resize',()=>{if(UI.route==='req'&&UI.tab==='preview')drawPreview()});
 

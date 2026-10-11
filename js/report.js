@@ -30,6 +30,7 @@ const REPORT_CSS=`
 .ck td.c.f{color:#c00}
 .f-foot{display:flex;border:1px solid #111;border-top:0;font-size:9.5px;margin-top:-1px}
 .f-foot>div{flex:1;padding:4px 8px;min-height:152px;position:relative}.f-foot>div+div{border-left:1px solid #111}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-top:2px}.sgi{display:flex;flex-direction:column;align-items:stretch;text-align:center}.sgi .sl{text-align:left;font-size:9.5px}.sgi .ss{height:50px;position:relative;display:flex;align-items:flex-end;justify-content:center}.sgi .ss img{max-height:46px;max-width:100%;mix-blend-mode:multiply}.sgi .sn{border-top:1px solid #111;padding-top:2px;font-weight:600;font-size:9.5px;min-height:13px}.sgi .sr{font-size:9px;color:#222;min-height:12px}.sgi .sd{font-size:9px;color:#333;margin-top:2px}
 .dl{border-bottom:1px dashed #111;display:inline-block;min-width:150px;text-align:center;min-height:13px}
 .f-copy{display:flex;border:1px solid #111;border-top:0;font-size:9.5px;font-weight:600}.f-copy div{flex:1;padding:2px 8px}.f-copy div+div{border-left:1px solid #111}
 .sigimg{position:absolute;height:34px;left:70px;top:76px;mix-blend-mode:multiply}
@@ -64,11 +65,14 @@ function focusBox(pl,pins){
   const minH=pl.h*.18;if(y1-y0<minH){const c=(y0+y1)/2;y0=Math.max(0,c-minH/2);y1=Math.min(pl.h,y0+minH)}
   return[x0,y0,x1-x0,y1-y0];
 }
+const hasCover=r=>r.cover?true:(r.cover===undefined&&(r.plans||[]).length>0);
 function coverPlan(r){
-  const pl=(r.plans||[]).find(p=>(p.shapes||[]).some(s=>s.t==='poly'&&!s.ref))||(r.plans||[])[0];if(!pl)return'';
-  const pins=planPins(r,pl);
-  return`<div class="f-plan"><div class="in">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins,{viewBox:focusBox(pl,pins),labels:false})}</div><div class="cap">แบบขอบเขตที่ส่งตรวจ · ${esc(pl.name)}</div></div>`;
+  let pl=r.cover,pins=[];
+  if(r.cover===undefined){pl=(r.plans||[]).find(p=>(p.shapes||[]).some(s=>s.t==='poly'&&!s.ref))||(r.plans||[])[0];if(pl)pins=planPins(r,pl)}   // เอกสารเก่า: ใช้แบบแนบเป็นแบบปก
+  if(!pl)return'';
+  return`<div class="f-plan"><div class="in">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins,{viewBox:focusBox(pl,pins),labels:false})}</div><div class="cap">แบบขอบเขตที่ส่งตรวจ${pl.name?' · '+esc(pl.name):''}</div></div>`;
 }
+const sigImg=id=>{const u=id&&imgSrc(id);return u?`<img src="${u}" alt="">`:''};
 function formHTML(r){
   const P=S.project;const logo=imgSrc(P.logoId)||'';const sig=P.sigId&&imgSrc(P.sigId)||'';
   const sym=v=>v==='P'?'✓':v==='F'?'✗':v==='N'?'N/A':'';
@@ -86,25 +90,26 @@ function formHTML(r){
     <b>Request No:${esc(r.no)}</b><br>หนังสือเล่มที่ ${esc(r.bookNo||'')}<br>Date: <b>${fmtDate(r.date)}</b><br>วันที่</div></div>
   <div class="f-proj"><b>PROJECT:</b>&nbsp; ${esc(P.name)}<br><b>LOCATE :</b>&nbsp; ${esc(P.locate)}</div>
   <table class="f-info"><tr><td>Date/ Planning Time:<br>เริ่มทำการเวลา</td><td class="v">${esc(r.planTime||'')} ${fmtDate(r.planDate)}</td></tr>
-   <tr><td>Type of work For Inspection<br>ชนิดงานที่ตรวจสอบ</td><td class="v">CM ${r.type}${r.workText?' '+esc(r.workText):''}${r.type==='CLOSE'?` (รอบ ${r.round})`:''}<div class="u" style="margin-top:3px;border-bottom:1px solid #111;font-size:11px">${esc(r.workType)}</div></td></tr>
+   <tr><td>Type of work For Inspection<br>ชนิดงานที่ตรวจสอบ</td><td class="v">${esc(kindLabel(r))}${r.workText?' '+esc(r.workText):''}${r.type==='CLOSE'?` (รอบ ${r.round})`:''}<div class="u" style="margin-top:3px;border-bottom:1px solid #111;font-size:11px">${esc(r.workType)}</div></td></tr>
    <tr><td>Location:<br>บริเวณที่ทำงานสถาปัตยกรรม</td><td class="v u" style="font-size:10px">${esc(r.location)}</td></tr></table>
   <div class="f-struct">${STRUCT.map(s=>`<span><span class="sbx">${st[s[0]]?'✕':''}</span>${s[1]}</span>`).join('')}</div>
   ${coverPlan(r)}
-  <div class="f-pos" style="${(r.plans||[]).length?'margin-top:60px':''}"><div>Position:<br>ตำแหน่ง :</div><div>อาคาร<br>ชั้น</div><div style="font-weight:700;font-size:11px">${esc(r.building)}<br>${esc(r.floor)}</div><div>Level :<br>ระดับ :</div><div class="ln">${esc(r.level)}</div><div>Concrete Strength:<br>กำลังอัดประลัย</div><div class="ln">${esc(r.strength)}</div><div>Slump:<br>การยุบตัว</div><div class="ln">${esc(r.slump)}</div></div>
+  <div class="f-pos" style="${hasCover(r)?'margin-top:60px':''}"><div>Position:<br>ตำแหน่ง :</div><div>อาคาร<br>ชั้น</div><div style="font-weight:700;font-size:11px">${esc(r.building)}<br>${esc(r.floor)}</div><div>Level :<br>ระดับ :</div><div class="ln">${esc(r.level)}</div><div>Concrete Strength:<br>กำลังอัดประลัย</div><div class="ln">${esc(r.strength)}</div><div>Slump:<br>การยุบตัว</div><div class="ln">${esc(r.slump)}</div></div>
   <div style="margin:3px 0 0;font-size:9.5px">Reference Shop Drawing No.: <b>${esc(r.refDwg||'')}</b></div>
   <table class="ck"><colgroup><col style="width:92px"><col style="width:170px"><col style="width:150px"><col style="width:34px"><col style="width:54px"><col style="width:34px"><col style="width:54px"><col style="width:42px"><col style="width:48px"><col></colgroup>
    <thead><tr><th colspan="3" style="border-bottom:0;height:12px">Checklist</th><th colspan="6" style="border-bottom:0;height:12px">Result of Inspection</th><th style="border-bottom:0;height:12px">Remark(s)</th></tr>
    <tr><th colspan="3" style="border-top:0">รายการที่ต้องตรวจสอบ</th><th>1 st</th><th>Date</th><th>2 nd</th><th>Date</th><th>KMIT</th><th>Consult</th><th style="border-top:0">หมายเหตุ</th></tr></thead>
    <tbody>${rows}</tbody></table>
-  <div class="f-foot"><div>Requested by:<br><br><span class="dl" style="min-width:210px">${esc(r.requestedName||'')}</span> <span style="margin-left:34px;font-size:9px">${esc(P.engName)}</span><br>
-    <span style="margin-left:60px">${esc(P.requestedRole)}</span><span style="margin-left:150px">${esc(P.engRole)}</span><br>Date : …………………&nbsp;&nbsp; Date : …………………<br>Reviewed by:<br><br>
-    <div style="margin-top:4px;display:flex;align-items:flex-end;gap:20px"><span>CC:</span><div style="width:190px;text-align:center"><div style="height:40px;position:relative">${sig?`<img src="${sig}" alt="" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);height:38px;mix-blend-mode:multiply">`:''}</div><div class="dl" style="min-width:190px">${esc(P.ccName)}</div></div></div><div style="margin-left:60px;width:190px;text-align:center">${esc(P.ccRole)}</div>
-    <div style="margin-left:60px;width:190px;text-align:center;font-size:9px">${longDate(r.date)}</div></div>
+  <div class="f-foot"><div><div class="sg">
+    <div class="sgi"><div class="sl">Requested by:</div><div class="ss">${sigImg(P.reqSigId)}</div><div class="sn">${esc(r.requestedName||P.requestedName||'')}</div><div class="sr">${esc(P.requestedRole||'')}</div><div class="sd">Date : ………………</div></div>
+    <div class="sgi"><div class="sl">Site Engineer:</div><div class="ss">${sigImg(P.engSigId)}</div><div class="sn">${esc(P.engName)}</div><div class="sr">${esc(P.engRole)}</div><div class="sd">Date : ………………</div></div>
+    <div class="sgi"><div class="sl">Reviewed by (CC):</div><div class="ss">${sig?`<img src="${sig}" alt="">`:''}</div><div class="sn">${esc(P.ccName)}</div><div class="sr">${esc(P.ccRole)}</div><div class="sd">${longDate(r.date)}</div></div>
+   </div></div>
    <div>Inspected by:<br><div style="margin:10px 0 8px;display:flex;gap:16px"><span><span class="bx" style="width:34px;height:14px;line-height:12px">${res==='approved'?'✕':''}</span> Approved</span><span><span class="bx" style="width:34px;height:14px;line-height:12px">${res==='disapproved'?'✕':''}</span> Disapproved</span><span><span class="bx" style="width:34px;height:14px;line-height:12px">${res==='other'?'✕':''}</span> Other</span></div>
     Notes: ${esc(r.notes||'')}<div style="position:absolute;bottom:8px;left:8px;right:8px;text-align:right;border-top:1px dashed #111;padding-top:2px">${esc(P.cmName)}<br>Date: …../…../……….</div></div></div>
   <div class="f-copy"><div>Copy: Owner : ${esc(P.owner)}</div><div>Contractor (${esc(P.contractor)})</div></div></div>`;
 }
-function pageHead(r,title,sub){const logo=imgSrc(S.project.logoId)||'';return`<div class="ph">${logo?`<img src="${logo}" alt="">`:''}<div><div class="pt">${esc(title)}</div><div class="ps">${esc(sub||'')}</div></div><div class="pn">${esc(r.no)}<br>CM ${r.type}${r.type==='CLOSE'?' รอบ '+r.round:''}</div></div>`}
+function pageHead(r,title,sub){const logo=imgSrc(S.project.logoId)||'';return`<div class="ph">${logo?`<img src="${logo}" alt="">`:''}<div><div class="pt">${esc(title)}</div><div class="ps">${esc(sub||'')}</div></div><div class="pn">${esc(r.no)}<br>${esc(kindLabel(r))}${r.type==='CLOSE'?' รอบ '+r.round:''}</div></div>`}
 function planPageHTML(r,pl){
   const pins=planPins(r,pl);const land=pl.w>=pl.h;
   const legend=[...new Map((pl.shapes||[]).filter(s=>s.t==='poly'&&s.label).map(s=>[s.c+s.label,s])).values()];
@@ -160,8 +165,8 @@ function buildReport(r){
   return{pages};
 }
 async function reportImages(r){
-  const ids=[];r.plans.forEach(p=>ids.push(p.imgId));r.photos.forEach(p=>ids.push(p.imgId));
-  await ensureData(ids);await ensureData([S.project.logoId,S.project.sigId],true);
+  const ids=[];if(r.cover)ids.push(r.cover.imgId);r.plans.forEach(p=>ids.push(p.imgId));r.photos.forEach(p=>ids.push(p.imgId));
+  await ensureData(ids);await ensureData([S.project.logoId,S.project.sigId,S.project.reqSigId,S.project.engSigId],true);
 }
 async function exportPDF(){
   const r=curReq();toast('กำลังสร้าง PDF…',4000);

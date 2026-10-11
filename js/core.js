@@ -27,6 +27,7 @@ function defaultProject(){return{
   name:'The title MODEVA',locate:'-',
   company:{name:'KMIT Construction Co., Ltd.',addr1:'188/49   Moo 4   Soi Khundon 1   T. Thepkrasattri   A. Thalang',addr2:'Phuket   83110   Tel: +66 76 313 048   Fax: +66 76 313 048'},
   logoId:'logo',prefix:'MOD-Inspection-AR-',nextNo:360,
+  kinds:[{id:'CM OPEN',label:'CM OPEN',role:'open'},{id:'CM CLOSE',label:'CM CLOSE',role:'close'}],reqSigId:'',engSigId:'',
   workType:'กระเบื้อง',
   requestedName:'',requestedRole:'(M&E)',
   engName:'Mr.Krittanai Songkhai',engRole:'Site Engineer',
@@ -135,7 +136,7 @@ function annotatedSvg(imgUrl,w,h,shapes,pins,opts={}){
 }
 
 /* ========= overlays / dialogs ========= */
-function overlay(html,cls){const o=document.createElement('div');o.className='ov '+(cls||'');o.innerHTML=html;document.body.appendChild(o);return o}
+function overlay(html,cls){const ro=MODE.ro;const o=document.createElement('div');o.className='ov '+(cls||'');o.dataset.ro=ro?'1':'0';o.innerHTML=html;document.body.appendChild(o);return o}
 function ask(title,fields,okText='ตกลง'){
   return new Promise(res=>{
     const o=overlay(`<div class="box"><h3 style="margin-bottom:12px">${esc(title)}</h3>${fields}<div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" data-x="no">ยกเลิก</button><button class="btn pri" data-x="ok">${esc(okText)}</button></div></div>`,'modal');
@@ -169,7 +170,7 @@ function openBoard(cfg){
      ${photo&&!ro?`<label class="small muted row" style="gap:4px">หนา<input type="range" min="1" max="10" value="${sw}" id="bsw" style="width:90px"></label>`:''}
      <span style="margin-left:auto" class="row"><button class="tool" data-a="zout">−</button><button class="tool" data-a="zin">＋</button><button class="tool" data-a="fit">พอดีจอ</button></span></div>
    <div class="bmain" id="bmain"><svg id="bsvg" xmlns="http://www.w3.org/2000/svg"><image href="${cfg.imgUrl}" x="0" y="0" width="${w}" height="${h}"/><g id="gx" style="pointer-events:none"></g><g id="gs"></g><g id="gp"></g><g id="gu"></g></svg></div>
-   <div class="binsp" id="binsp"></div>`,'board');
+   <div class="binsp" id="binsp"></div>`,'board');if(cfg.stampRO!==undefined)o.dataset.ro=cfg.stampRO?'1':'0';
   const gx=$('#gx',o),svg=$('#bsvg',o),gs=$('#gs',o),gp=$('#gp',o),gu=$('#gu',o),insp=$('#binsp',o),bmain=$('#bmain',o);
   const hint=t=>{$('#bhint',o).textContent=t||''};
   function applyView(){svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`)}
@@ -235,7 +236,7 @@ function openBoard(cfg){
     if(e.button===1||tool==='pan'){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view}};return}
     if(tool==='select'){
       if(vi&&sel>=0){pushUndo();drag={m:'vtx',k:+vi.dataset.v};return}
-      if(pi&&cfg.pinLock){cfg.onPinClick&&cfg.onPinClick(pi.dataset.pin,redraw);return}
+      if(pi&&(typeof cfg.pinLock==='function'?cfg.pinLock(pi.dataset.pin):cfg.pinLock)){cfg.onPinClick&&cfg.onPinClick(pi.dataset.pin,redraw);return}
       if(pi){const d=defectById(pi.dataset.pin);drag={m:'pin',id:pi.dataset.pin,sx:p[0],sy:p[1],moved:false,orig:d&&d.loc?{x:d.loc.x,y:d.loc.y}:null};return}
       if(si){const i=+si.dataset.i;select(i);pushUndo();drag={m:'move',sx:p[0],sy:p[1],orig:clone(shapes[i]),moved:false};return}
       if(sel>=0){sel=-1;redraw();renderInsp()}
