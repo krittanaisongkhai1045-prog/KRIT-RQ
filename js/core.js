@@ -130,6 +130,27 @@ function pinSvg(p,U,inter){
   return`<g ${inter?`data-pin="${p.id}" style="cursor:pointer"`:''}><circle cx="${p.x}" cy="${p.y}" r="${27*U}" fill="${col}" fill-opacity=".12" stroke="${col}" stroke-width="${2*U}" stroke-dasharray="${6*U} ${4*U}"/><circle cx="${p.x}" cy="${p.y}" r="${15*U}" fill="${col}" stroke="#fff" stroke-width="${2.5*U}"/><text x="${p.x}" y="${p.y}" font-size="${10.5*U}" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central" pointer-events="none">${esc(p.label)}</text></g>`;
 }
 const unitOf=(w,h)=>Math.max(w,h)/1000;
+/* กลับด้านแบบ (mirror): axis 'x' = ซ้าย↔ขวา, 'y' = บน↔ล่าง — คืนค่าพิกัดใหม่ของโซน */
+function mirrorShapes(shapes,W,H,axis){
+  const fx=x=>axis==='x'?W-x:x,fy=y=>axis==='y'?H-y:y;
+  (shapes||[]).forEach(s=>{
+    if(s.pts)s.pts=s.pts.map(p=>[fx(p[0]),fy(p[1])]);
+    else if(s.t==='arrow'){s.x1=fx(s.x1);s.x2=fx(s.x2);s.y1=fy(s.y1);s.y2=fy(s.y2)}
+    else if(s.t==='rect'){if(axis==='x')s.x=W-s.x-s.w;else s.y=H-s.y-s.h}
+    else if(s.t==='ell'){s.cx=fx(s.cx);s.cy=fy(s.cy)}
+    else if(s.t==='text'){s.x=fx(s.x);s.y=fy(s.y)}
+  });
+}
+/* สร้างรูปแบบที่กลับด้านแล้ว คืน id รูปใหม่ */
+async function flippedImageId(imgId,axis){
+  await ensureData([imgId]);
+  const src=IMGDATA.get(imgId)||imgSrc(imgId);const im=await loadImgEl(src);
+  const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+  if(axis==='x'){x.translate(c.width,0);x.scale(-1,1)}else{x.translate(0,c.height);x.scale(1,-1)}
+  x.drawImage(im,0,0);
+  return putImage(c.toDataURL('image/jpeg',.92));
+}
 /* static image + annotations, as an <svg> string */
 function annotatedSvg(imgUrl,w,h,shapes,pins,opts={}){
   const U=unitOf(w,h)*(opts.scale||1);const vb=opts.viewBox||[0,0,w,h];
@@ -170,9 +191,10 @@ function openBoard(cfg){
      ${ro?'':COLORS.map(c=>`<button class="sw" data-color="${c}" style="background:${c}" aria-pressed="false" aria-label="สี ${c}"></button>`).join('')}
      ${photo&&!ro?`<label class="small muted row" style="gap:4px">หนา<input type="range" min="1" max="10" value="${sw}" id="bsw" style="width:90px"></label>`:''}
      ${!photo&&!ro&&cfg.onScale?`<label class="small muted row" style="gap:4px" title="ปรับขนาดหมุด ตัวอักษร และเส้นในแบบนี้">ขนาดสัญลักษณ์<input type="range" min="8" max="250" value="${Math.round(SC*100)}" id="bsym" style="width:110px"><b class="mono" id="bsymv">${Math.round(SC*100)}%</b></label>`:''}
+     ${!photo&&!ro&&cfg.onFlip?'<button class="tool" data-a="flipx" title="กลับด้านแบบซ้าย↔ขวา (mirror)">⇋ กลับซ้าย-ขวา</button><button class="tool" data-a="flipy" title="กลับด้านแบบบน↔ล่าง">⇅ กลับบน-ล่าง</button>':''}
      <span style="margin-left:auto" class="row"><button class="tool" data-a="zout">−</button><button class="tool" data-a="zin">＋</button><button class="tool" data-a="fit">พอดีจอ</button></span></div>
    <div class="bmain" id="bmain"><svg id="bsvg" xmlns="http://www.w3.org/2000/svg"><image href="${cfg.imgUrl}" x="0" y="0" width="${w}" height="${h}"/><g id="gx" style="pointer-events:none"></g><g id="gs"></g><g id="gp"></g><g id="gu"></g></svg></div>
-   <div class="binsp" id="binsp"></div>`,'board');if(cfg.stampRO!==undefined)o.dataset.ro=cfg.stampRO?'1':'0';
+   <div class="binsp" id="binsp"></div>${!photo&&cfg.pins?'<div class="pdock" id="pdock"></div>':''}`,'board');if(cfg.stampRO!==undefined)o.dataset.ro=cfg.stampRO?'1':'0';
   const gx=$('#gx',o),svg=$('#bsvg',o),gs=$('#gs',o),gp=$('#gp',o),gu=$('#gu',o),insp=$('#binsp',o),bmain=$('#bmain',o);
   const hint=t=>{$('#bhint',o).textContent=t||''};
   function applyView(){svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`)}
@@ -187,6 +209,7 @@ function openBoard(cfg){
     gx.innerHTML=cfg.under?cfg.under():'';
     gs.innerHTML=shapes.map((s,i)=>shapeSvg(s,i,U,true)).join('');
     gp.innerHTML=(cfg.pins?cfg.pins():[]).map(p=>pinSvg(p,U,true)).join('');
+    renderDock();
     let u='';
     if(sel>=0&&shapes[sel]){const s=shapes[sel];const hs=7*H;const hnd=(x,y,k)=>`<circle data-v="${k}" cx="${x}" cy="${y}" r="${hs}" fill="#fff" stroke="#1971c2" stroke-width="${2*H}" style="cursor:grab"/>`;
       if(s.t==='poly')u+=s.pts.map((p,k)=>hnd(p[0],p[1],k)).join('');
@@ -196,6 +219,16 @@ function openBoard(cfg){
     if(draft){u+=draftSvg()}
     gu.innerHTML=u;
   }
+  /* แถบรายการหมุดด้านล่าง: แตะเพื่อซูมไปที่หมุดและเปิดรายละเอียด (ใช้งานบนมือถือ) */
+  function renderDock(){
+    const d=$('#pdock',o);if(!d)return;const ps=cfg.pins?cfg.pins():[];
+    d.innerHTML=(ps.length?ps.map(p=>`<button class="pchip ${p.st||'open'}" data-chip="${esc(p.id)}">${esc(p.label)}</button>`).join(''):'<span class="small muted">ยังไม่มีหมุด</span>')+(!ro&&!cfg.noPin&&!photo?'<button class="pchip add" data-tool="pin">＋ ปักหมุด DEFECT</button>':'');
+  }
+  function focusPin(id){const p=(cfg.pins?cfg.pins():[]).find(x=>String(x.id)===String(id));if(!p)return;
+    const nw=Math.min(view.w,Math.max(w/12,Math.min(w,h)/4));const k=nw/view.w;view={x:p.x-nw/2,y:p.y-view.h*k/2,w:nw,h:view.h*k};applyView();}
+  /* หมุดที่ใกล้จุดที่แตะที่สุด (รัศมีตามขนาดนิ้ว ไม่ขึ้นกับขนาดหมุดหรือการซูม) */
+  function hitPin(pt){let best=null,bd=1e18;const R=Math.max(30*scr(),20*U*.65);
+    (cfg.pins?cfg.pins():[]).forEach(p=>{const d=Math.hypot(p.x-pt[0],p.y-pt[1]);if(d<R&&d<bd){bd=d;best=p.id}});return best}
   function bbox(s){let xs=[],ys=[];
     if(s.t==='poly'||s.t==='pen'){s.pts.forEach(p=>{xs.push(p[0]);ys.push(p[1])})}
     else if(s.t==='arrow'){xs=[s.x1,s.x2];ys=[s.y1,s.y2]}
@@ -233,13 +266,14 @@ function openBoard(cfg){
   svg.addEventListener('pointerdown',e=>{
     svg.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(ptrs.size===2){const a=[...ptrs.values()];pinch={d:Math.hypot(a[0].x-a[1].x,a[1].y-a[0].y),view:{...view},mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2};drag=null;if(draft&&draft.t!=='poly')draft=null;return}
-    const p=toPt(e);const t=e.target;const vi=t.closest&&t.closest('[data-v]');const si=t.closest&&t.closest('[data-i]');const pi=t.closest&&t.closest('[data-pin]');
-    if(ro){if(pi){cfg.onPinClick&&cfg.onPinClick(pi.dataset.pin,redraw);return}drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view}};return}
-    if(e.button===1||tool==='pan'){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view}};return}
+    const p=toPt(e);const t=e.target;const vi=t.closest&&t.closest('[data-v]');const si=t.closest&&t.closest('[data-i]');let pi=t.closest&&t.closest('[data-pin]');
+    if(!pi&&(ro||tool==='select'||tool==='pan')){const hp=hitPin(p);if(hp!=null)pi={dataset:{pin:hp}}}
+    if(ro){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view},pinId:pi?pi.dataset.pin:null};return}
+    if(e.button===1||tool==='pan'){drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view},pinId:pi?pi.dataset.pin:null};return}
     if(tool==='select'){
       if(vi&&sel>=0){pushUndo();drag={m:'vtx',k:+vi.dataset.v};return}
       if(pi&&(typeof cfg.pinLock==='function'?cfg.pinLock(pi.dataset.pin):cfg.pinLock)){cfg.onPinClick&&cfg.onPinClick(pi.dataset.pin,redraw);return}
-      if(pi){const d=defectById(pi.dataset.pin);drag={m:'pin',id:pi.dataset.pin,sx:p[0],sy:p[1],moved:false,orig:d&&d.loc?{x:d.loc.x,y:d.loc.y}:null};return}
+      if(pi){const d=(cfg.pinObj||defectById)(pi.dataset.pin);drag={m:'pin',id:pi.dataset.pin,sx:p[0],sy:p[1],moved:false,orig:d&&d.loc?{x:d.loc.x,y:d.loc.y}:null};return}
       if(si){const i=+si.dataset.i;select(i);pushUndo();drag={m:'move',sx:p[0],sy:p[1],orig:clone(shapes[i]),moved:false};return}
       if(sel>=0){sel=-1;redraw();renderInsp()}
       drag={m:'pan',sx:e.clientX,sy:e.clientY,v:{...view}};return}
@@ -277,7 +311,7 @@ function openBoard(cfg){
       if(s.t==='poly'||s.t==='pen')s.pts=o0.pts.map(q=>[q[0]+dx,q[1]+dy]);else if(s.t==='arrow'){s.x1=o0.x1+dx;s.y1=o0.y1+dy;s.x2=o0.x2+dx;s.y2=o0.y2+dy}
       else if(s.t==='ell'){s.cx=o0.cx+dx;s.cy=o0.cy+dy}else{s.x=o0.x+dx;s.y=o0.y+dy}
       redraw();return}
-    if(drag.m==='pin'){const d=defectById(drag.id);if(d&&d.loc){const dx=p[0]-drag.sx,dy=p[1]-drag.sy;if(Math.hypot(dx,dy)>3*scr()||drag.moved){drag.moved=true;d.loc.x=drag.orig.x+dx;d.loc.y=drag.orig.y+dy;redraw()}}return}
+    if(drag.m==='pin'){const d=defectById(drag.id);if(d&&d.loc){const dx=p[0]-drag.sx,dy=p[1]-drag.sy;if(Math.hypot(dx,dy)>(e.pointerType==='touch'?14:5)*scr()||drag.moved){drag.moved=true;d.loc.x=drag.orig.x+dx;d.loc.y=drag.orig.y+dy;redraw()}}return}
   });
   function mk(d){
     if(d.t==='rect'||(d.t==='zonerect')){const x=Math.min(d.x0,d.x1),y=Math.min(d.y0,d.y1);const ww=Math.abs(d.x1-d.x0),hh=Math.abs(d.y1-d.y0);
@@ -296,6 +330,7 @@ function openBoard(cfg){
       else redraw();
       return}
     if(dm.m==='move'||dm.m==='vtx'){if(dm.m==='move'&&!dm.moved)undo.pop();changed();redraw();return}
+    if(dm.m==='pan'&&dm.pinId!=null&&Math.hypot(e.clientX-dm.sx,e.clientY-dm.sy)<10){cfg.onPinClick&&cfg.onPinClick(dm.pinId,redraw);return}
     if(dm.m==='pin'){if(dm.moved){changed();cfg.onPinMove&&cfg.onPinMove(dm.id)}else cfg.onPinClick&&cfg.onPinClick(dm.id,redraw);return}
   }
   svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
@@ -303,6 +338,7 @@ function openBoard(cfg){
   /* UI events */
   o.addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b)return;
+    if(b.dataset.chip){focusPin(b.dataset.chip);cfg.onPinClick&&cfg.onPinClick(b.dataset.chip,redraw);return}
     if(b.dataset.tool){tool=b.dataset.tool;if(tool!=='zone')draft=null;updateTools();redraw();return}
     if(b.dataset.color){color=b.dataset.color;updateTools();return}
     if(b.dataset.scolor&&shapes[sel]){pushUndo();shapes[sel].c=b.dataset.scolor;changed();redraw();renderInsp();return}
@@ -312,6 +348,7 @@ function openBoard(cfg){
     else if(a==='zin'){zoomAt(1/1.3,view.x+view.w/2,view.y+view.h/2)}
     else if(a==='zout'){zoomAt(1.3,view.x+view.w/2,view.y+view.h/2)}
     else if(a==='fit')fit();
+    else if(a==='flipx'||a==='flipy'){const ax=a==='flipx'?'x':'y';toast('กำลังกลับด้านแบบ…',1500);Promise.resolve(cfg.onFlip(ax)).then(url=>{if(url){const im=$('#bsvg > image',o);im.setAttribute('href',url)}sel=-1;redraw();renderInsp();toast('กลับด้านแล้ว โซนและหมุดกลับตาม (กดซ้ำเพื่อย้อนกลับ)',3500)}).catch(e=>toast('กลับด้านไม่สำเร็จ: '+((e&&e.message)||e),4500))}
     else if(a==='finish')finishPoly();
     else if(a==='cancel'){draft=null;redraw();renderInsp()}
     else if(a==='del'&&sel>=0){pushUndo();shapes.splice(sel,1);sel=-1;changed();redraw();renderInsp()}

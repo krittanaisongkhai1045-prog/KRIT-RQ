@@ -149,7 +149,7 @@ function editDefect(d,ctx){
   const RO=MODE.ro||!canEditDefect(d);o.dataset.ro=RO?'1':'0';
   if(RO){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del]',o).forEach(x=>x.remove())}
   const gbox=$('#gbox',o);
-  function drawGrid(){const g=d.grid;if(!g||!g.cols){gbox.innerHTML='<div class="empty small">ยังไม่ได้สร้างผังกระเบื้อง (ข้ามได้ถ้าไม่จำเป็น)</div>';return}
+  function drawGrid(){const g=d.grid;if(!g||!g.cols){const pp=planOfDefect(d);gbox.innerHTML=pp?`<div style="height:170px;max-width:340px;border:1px solid var(--line);border-radius:6px;overflow:hidden">${locCropSvg(d,pp)}</div><p class="small muted" style="margin:6px 0 0">ยังไม่ได้สร้างผังกระเบื้อง · แสดงตำแหน่ง DEFECT บนแบบ “${esc(pp.name||'')}” แทน (ใบ DEFECT จะพิมพ์ภาพนี้)</p>`:'<div class="empty small">ยังไม่ได้สร้างผังกระเบื้อง (ข้ามได้ถ้าไม่จำเป็น)</div>';return}
     gbox.innerHTML=`<div class="gsvg-wrap">${gridSvg(g).replace('<svg','<svg class="gsvg" id="gsvg"')}</div><p class="small muted" style="margin:6px 0 0">${g.cols} คอลัมน์ × ${g.rows} แถว · เลือกอยู่ ${g.cells.length} แผ่น ${g.cells.length?'· '+esc(gridText(g)):''}</p>`}
   drawGrid();
   o.addEventListener('input',e=>{const t=e.target;
@@ -241,7 +241,7 @@ function coverSection(r){
 function setCover(r,lib){const old=r.cover;r.cover={libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:old&&old.w===lib.w&&old.h===lib.h?old.shapes:[]};save()}
 function openCover(r){
   const c=r.cover;if(!c)return;
-  openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,scale:()=>c.sym||1,onScale:v=>{c.sym=v;save()},onChange:save,onClose:()=>refreshTab()});
+  openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,scale:()=>c.sym||1,onScale:v=>{c.sym=v;save()},onFlip:async ax=>{const id=await flippedImageId(c.imgId,ax);c.imgId=id;mirrorShapes(c.shapes,c.w,c.h,ax);save();return imgSrc(id)},onChange:save,onClose:()=>refreshTab()});
 }
 function tabPlans(r){
   let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ และปักหมุดตำแหน่ง DEFECT</span></div>`;
@@ -276,6 +276,10 @@ function planPicker(r,cb){
 }
 function openPlan(r,pl,pinFor){
   const board=openBoard({kind:'plan',ro:MODE.ro,title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,scale:()=>pl.sym||1,onScale:v=>{pl.sym=v;save()},
+    onFlip:async ax=>{const id=await flippedImageId(pl.imgId,ax);
+      chainReqs(rootId(r)).forEach(q=>(q.plans||[]).forEach(p=>{if(p.key===pl.key){p.imgId=id;mirrorShapes(p.shapes,p.w,p.h,ax)}}));
+      S.defects.forEach(d=>{if(d.loc&&d.loc.planKey===pl.key){if(ax==='x')d.loc.x=pl.w-d.loc.x;else d.loc.y=pl.h-d.loc.y}});
+      save();return imgSrc(id)},
     onChange:save,pins:()=>planPins(r,pl),
     onPinMove:()=>save(),
     onPinClick:(id,redraw)=>{const d=defectById(id);if(d)editDefect(d,{req:r,canDelete:d.foundIn===r.id,after:(closed)=>{redraw();},pin:dd=>{board.close();openPlan(r,pl,dd)}})},

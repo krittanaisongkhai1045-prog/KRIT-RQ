@@ -128,6 +128,18 @@ function defectPhotos(r,d){
   const after=r.photos.filter(p=>p.defectId===d.id&&p.stage==='after');
   return{before:before[0],after:after[0]};
 }
+/* ตำแหน่ง DEFECT บนแบบ ซูมเข้าใกล้หมุด — ใช้แทนผังกระเบื้องเมื่อไม่ได้ทำผัง */
+function planOfDefect(d){
+  if(!d||!d.loc)return null;
+  if(d.loc.libId)return S.library.find(l=>l.id===d.loc.libId)||null;
+  for(const q of chainReqs(d.rootId).slice().reverse()){const p=(q.plans||[]).find(x=>x.key===d.loc.planKey);if(p)return p}
+  return null;
+}
+function locCropSvg(d,pl,z){
+  const sz=Math.max(pl.w,pl.h)*(z||.1),W=sz*1.4,Hh=sz;
+  const vx=Math.min(Math.max(d.loc.x-W/2,0),Math.max(pl.w-W,0)),vy=Math.min(Math.max(d.loc.y-Hh/2,0),Math.max(pl.h-Hh,0));
+  return annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes||[],[{id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:'open'}],{viewBox:[vx,vy,W,Hh],scale:pl.sym,labels:false});
+}
 function defectPagesHTML(r){
   const vis=visibleDefects(r);if(!vis.length)return[];
   const pages=[];
@@ -137,7 +149,7 @@ function defectPagesHTML(r){
       const ph=defectPhotos(r,d);const res=r.res&&r.res[d.id]&&r.res[d.id].r;
       const im=(p,lab)=>`<div class="pth"><div class="im">${p?annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[]):'—'}</div><div class="cp">${lab}${p&&p.caption?': '+esc(p.caption):''}</div></div>`;
       return`<div class="drow"><div class="c1"><div class="code">${esc(pinLabel(d))}</div><div class="mono" style="font-size:9px">${esc(d.code)}</div><div style="margin-top:8px;font-size:10px"><span class="sbx">${res==='pass'?'✕':''}</span>ผ่าน<br><span class="sbx">${res==='fail'?'✕':''}</span>ไม่ผ่าน</div></div>
-       <div class="c2">${d.grid&&d.grid.cols?gridSvg(d.grid):'<div style="color:#888;margin-top:50px">ไม่มีผังกระเบื้อง</div>'}${d.grid&&d.grid.cols?`<div style="font-size:9px">${d.grid.tw?`กระเบื้อง ${d.grid.tw}×${d.grid.th} ซม.`:''}</div>`:''}</div>
+       <div class="c2">${d.grid&&d.grid.cols?gridSvg(d.grid):(planOfDefect(d)?`<div style="height:112px;border:1px solid #bbb;overflow:hidden;margin-top:4px">${locCropSvg(d,planOfDefect(d))}</div><div style="font-size:8.5px;color:#444">ตำแหน่งบนแบบ · ${esc(planOfDefect(d).name||'')}</div>`:'<div style="color:#888;margin-top:50px">ไม่มีผังกระเบื้อง</div>')}${d.grid&&d.grid.cols?`<div style="font-size:9px">${d.grid.tw?`กระเบื้อง ${d.grid.tw}×${d.grid.th} ซม.`:''}</div>`:''}</div>
        <div class="c3"><div><b>${esc(d.area||'—')}</b> · ${esc(d.surface||'')} ${esc(d.face?'ด้าน '+d.face:'')}</div><div><b>${esc(d.type||'')}</b>${d.desc?' — '+esc(d.desc):''}</div>
         ${d.grid&&d.grid.cells&&d.grid.cells.length?`<div>ตำแหน่งกระเบื้อง: ${esc(gridText(d.grid))}</div>`:''}
         ${d.fix?`<div><b>วิธีแก้เฉพาะจุด:</b> ${esc(d.fix)}</div>`:''}${d.protect?`<div style="color:#b00"><b>ห้ามกระทบ:</b> ${esc(d.protect)}</div>`:''}${d.due?`<div>กำหนดแก้เสร็จ ${fmtDate(d.due)}</div>`:''}

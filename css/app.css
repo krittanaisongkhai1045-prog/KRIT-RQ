@@ -148,3 +148,8 @@ table.t input[type=text]{padding:3px 6px;font-size:13px}
 .sbox .sheet{transform-origin:top left}
 
 .sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.sigc{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--surface2)}.sigc>b{font-family:var(--f-head)}.sigv{height:72px;background:#fff;border:1px dashed var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center}.sigv img{max-height:64px;max-width:100%;mix-blend-mode:multiply}
+.pdock{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:var(--surface);border-top:1px solid var(--line);-webkit-overflow-scrolling:touch;align-items:center}
+.pchip{flex:none;min-width:52px;min-height:44px;padding:0 14px;border-radius:22px;border:2px solid #e03131;background:#fff;color:#c92a2a;font-weight:700;font-size:15px;font-family:var(--f-mono)}
+.pchip.closed{border-color:#2f9e44;color:#2b8a3e}.pchip.fixed{border-color:#f08c00;color:#d9730d}
+.pchip.add{border:2px dashed var(--accent);color:var(--accent);font-family:inherit;white-space:nowrap}
+@media(max-width:700px){.obar .tool{min-height:40px}.obar .sw{width:34px;height:34px}}

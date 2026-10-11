@@ -148,6 +148,7 @@ function openSite(lib,opts){
   else{try{shapes=JSON.parse(localStorage.getItem(SITE_MINE(lib.id))||'[]')}catch(e){shapes=[]}}
   const pins=()=>qcList().filter(d=>d.loc&&d.loc.libId===lib.id&&(showClosed||d.status!=='closed')).map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status==='closed'?'closed':d.status==='fixed'?'fixed':'open'}));
   const board=openBoard({kind:'plan',ro:false,stampRO:!canCreate(),pinLock:id=>{const d=defectById(id);return !(d&&canEditDefect(d))},noPin:!canPin,title:lib.name+(lib.rev?' · '+lib.rev:''),imgUrl:imgSrc(lib.imgId),w:lib.w,h:lib.h,shapes,pinFor,
+    ...(owner?{onFlip:async ax=>{const id=await flippedImageId(lib.imgId,ax);lib.imgId=id;mirrorShapes(lib.shapes,lib.w,lib.h,ax);qcList().forEach(d=>{if(d.loc&&d.loc.libId===lib.id){if(ax==='x')d.loc.x=lib.w-d.loc.x;else d.loc.y=lib.h-d.loc.y}});save();return imgSrc(id)}}:{}),
     scale:()=>sc,onScale:v=>{sc=v;if(owner){lib.sym=v;save()}else try{localStorage.setItem(symKey,v)}catch(e){}},
     header:`<button class="btn sm" data-a="tglc">แสดงที่ปิดแล้ว</button><button class="btn sm" data-a="png">บันทึกเป็นรูป</button>${owner?'':'<span class="chip warn">ขีดเขียนเก็บเฉพาะเครื่องนี้ (ไม่มีสิทธิ์แก้แบบนี้)</span>'}`,
     under:owner?null:()=>(lib.shapes||[]).map((s,i)=>shapeSvg(s,i,U*(lib.sym||1),false)).join(''),
