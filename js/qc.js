@@ -128,7 +128,7 @@ function viewSite(){
   for(const l of lib){
     const pins=qcList().filter(d=>d.loc&&d.loc.libId===l.id);const open=pins.filter(d=>d.status!=='closed');const nz=(l.shapes||[]).filter(s=>s.t==='poly').length;
     if(hasGroup&&(l.group||'')!==last)cards+=`<div class="ghead l1" style="grid-column:1/-1;margin-top:10px"><b>${esc(l.group||'ไม่ระบุกลุ่ม')}</b></div>`;last=l.group||'';
-    cards+=`<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,l.shapes||[],open.map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status})))}</div><div class="body">
+    cards+=`<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,l.shapes||[],open.map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status})),{scale:l.sym})}</div><div class="body">
      ${canEditPlan(l)?`<input type="text" data-sl="${l.id}" data-k="name" value="${esc(l.name)}" aria-label="ชื่อแบบ">
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px"><input type="text" data-sl="${l.id}" data-k="rev" value="${esc(l.rev||'')}" placeholder="Rev. เช่น R3" aria-label="revision"><input type="date" data-sl="${l.id}" data-k="date" value="${esc(l.date||'')}" aria-label="วันที่แบบ"></div>
       <input type="text" data-sl="${l.id}" data-k="group" value="${esc(l.group||'')}" placeholder="กลุ่ม เช่น อาคาร A / ชั้น 3" list="sitegrp">`
@@ -143,12 +143,14 @@ const SITE_MINE=id=>'sitemine:'+id;
 function openSite(lib,opts){
   opts=opts||{};const owner=canEditPlan(lib);const canPin=canCreate();let showClosed=!!opts.pinFor;let pinFor=opts.pinFor||null;
   const U=unitOf(lib.w,lib.h);let shapes;
+  const symKey='symmine:'+lib.id;let sc=lib.sym||1;if(!owner){try{sc=+localStorage.getItem(symKey)||lib.sym||1}catch(e){}}
   if(owner){shapes=lib.shapes||(lib.shapes=[])}
   else{try{shapes=JSON.parse(localStorage.getItem(SITE_MINE(lib.id))||'[]')}catch(e){shapes=[]}}
   const pins=()=>qcList().filter(d=>d.loc&&d.loc.libId===lib.id&&(showClosed||d.status!=='closed')).map(d=>({id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status==='closed'?'closed':d.status==='fixed'?'fixed':'open'}));
   const board=openBoard({kind:'plan',ro:false,stampRO:!canCreate(),pinLock:id=>{const d=defectById(id);return !(d&&canEditDefect(d))},noPin:!canPin,title:lib.name+(lib.rev?' · '+lib.rev:''),imgUrl:imgSrc(lib.imgId),w:lib.w,h:lib.h,shapes,pinFor,
+    scale:()=>sc,onScale:v=>{sc=v;if(owner){lib.sym=v;save()}else try{localStorage.setItem(symKey,v)}catch(e){}},
     header:`<button class="btn sm" data-a="tglc">แสดงที่ปิดแล้ว</button><button class="btn sm" data-a="png">บันทึกเป็นรูป</button>${owner?'':'<span class="chip warn">ขีดเขียนเก็บเฉพาะเครื่องนี้ (ไม่มีสิทธิ์แก้แบบนี้)</span>'}`,
-    under:owner?null:()=>(lib.shapes||[]).map((s,i)=>shapeSvg(s,i,U,false)).join(''),
+    under:owner?null:()=>(lib.shapes||[]).map((s,i)=>shapeSvg(s,i,U*(lib.sym||1),false)).join(''),
     pins,
     onChange:()=>{if(owner)save();else try{localStorage.setItem(SITE_MINE(lib.id),JSON.stringify(shapes))}catch(e){}},
     onPinMove:()=>save(),
@@ -158,17 +160,17 @@ function openSite(lib,opts){
       Promise.resolve(allocNo('qc',1)).then(n=>{const d=newQC({libId:lib.id,x,y},n);save();board.redraw();editQC(d,{after:()=>board.redraw()})}).catch(e=>toast('ขอเลขที่ไม่สำเร็จ: '+((e&&e.message)||e),5000))},
     onAction:async a=>{
       if(a==='tglc'){showClosed=!showClosed;board.redraw();toast(showClosed?'แสดงหมุดที่ปิดแล้ว':'ซ่อนหมุดที่ปิดแล้ว');return}
-      if(a==='png'){await sitePng(lib,(lib.shapes||[]).concat(owner?[]:shapes),pins());return}
+      if(a==='png'){await sitePng(lib,(lib.shapes||[]).concat(owner?[]:shapes),pins(),sc);return}
     },
     onClose:()=>{opts.after&&opts.after()}});
   return board;
 }
-async function sitePng(lib,shapes,pins){
+async function sitePng(lib,shapes,pins,sc){
   try{
     toast('กำลังสร้างรูป…',2500);
     const im=await loadImgEl(imgSrc(lib.imgId));const k=Math.min(1,3000/Math.max(lib.w,lib.h));const W=Math.round(lib.w*k),H=Math.round(lib.h*k);
     const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);x.drawImage(im,0,0,W,H);
-    const U=unitOf(lib.w,lib.h);
+    const U=unitOf(lib.w,lib.h)*(sc||lib.sym||1);
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${lib.w} ${lib.h}" width="${W}" height="${H}">${shapes.map((s,i)=>shapeSvg(s,i,U,false)).join('')}${pins.map(p=>pinSvg(p,U,false)).join('')}</svg>`;
     const ov=await loadImgEl('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));x.drawImage(ov,0,0,W,H);
     const blob=await new Promise(r=>c.toBlob(r,'image/png'));
@@ -199,7 +201,7 @@ function qcPages(list){
       let side='';
       if(k===0){
         if(lib){const pin=[{id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:d.status==='closed'?'closed':'open'}];const sz=Math.max(lib.w,lib.h)*.22;const vx=Math.min(Math.max(d.loc.x-sz*.75,0),Math.max(lib.w-sz*1.5,0)),vy=Math.min(Math.max(d.loc.y-sz*.5,0),Math.max(lib.h-sz,0));
-          side+=`<div class="tt">ตำแหน่งบนแบบ · ${esc(lib.name)}${lib.rev?' ('+esc(lib.rev)+')':''}</div><div class="rb">${annotatedSvg(imgSrc(lib.imgId),lib.w,lib.h,lib.shapes||[],pin)}</div><div class="rb">${annotatedSvg(imgSrc(lib.imgId),lib.w,lib.h,lib.shapes||[],pin,{viewBox:[vx,vy,sz*1.5,sz]})}</div>`}
+          side+=`<div class="tt">ตำแหน่งบนแบบ · ${esc(lib.name)}${lib.rev?' ('+esc(lib.rev)+')':''}</div><div class="rb">${annotatedSvg(imgSrc(lib.imgId),lib.w,lib.h,lib.shapes||[],pin,{scale:lib.sym})}</div><div class="rb">${annotatedSvg(imgSrc(lib.imgId),lib.w,lib.h,lib.shapes||[],pin,{viewBox:[vx,vy,sz*1.5,sz],scale:lib.sym})}</div>`}
         if(d.grid&&d.grid.cols)side+=`<div class="tt">ตำแหน่งกระเบื้องที่ต้องแก้</div><div style="max-height:150px;display:flex;justify-content:center">${gridSvg(d.grid,150)}</div><div>${esc(gridText(d.grid))}</div>`;
         if(d.protect)side+=`<div class="tt">ข้อควรระวัง</div><div>${esc(d.protect)}</div>`;
       }

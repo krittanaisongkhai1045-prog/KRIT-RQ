@@ -70,7 +70,7 @@ function coverPlan(r){
   let pl=r.cover,pins=[];
   if(r.cover===undefined){pl=(r.plans||[]).find(p=>(p.shapes||[]).some(s=>s.t==='poly'&&!s.ref))||(r.plans||[])[0];if(pl)pins=planPins(r,pl)}   // เอกสารเก่า: ใช้แบบแนบเป็นแบบปก
   if(!pl)return'';
-  return`<div class="f-plan"><div class="in">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins,{viewBox:focusBox(pl,pins),labels:false})}</div><div class="cap">แบบขอบเขตที่ส่งตรวจ${pl.name?' · '+esc(pl.name):''}</div></div>`;
+  return`<div class="f-plan"><div class="in">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins,{viewBox:focusBox(pl,pins),labels:false,scale:pl.sym})}</div><div class="cap">แบบขอบเขตที่ส่งตรวจ${pl.name?' · '+esc(pl.name):''}</div></div>`;
 }
 const sigImg=id=>{const u=id&&imgSrc(id);return u?`<img src="${u}" alt="">`:''};
 function formHTML(r){
@@ -114,7 +114,7 @@ function planPageHTML(r,pl){
   const pins=planPins(r,pl);const land=pl.w>=pl.h;
   const legend=[...new Map((pl.shapes||[]).filter(s=>s.t==='poly'&&s.label).map(s=>[s.c+s.label,s])).values()];
   const ds=pins.map(p=>defectById(p.id));
-  const svg=annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins);
+  const svg=annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,pins,{scale:pl.sym});
   const lg=`<div class="lg">${legend.map(s=>`<span><span class="dt" style="background:${s.c}"></span>${esc(s.label)}</span>`).join('')}${pins.length?`<span><span class="dt" style="background:#e03131;border-radius:50%"></span>ตำแหน่ง DEFECT ${r.type==='CLOSE'?'ที่แก้ไขและส่งตรวจซ้ำ':''}</span>`:''}${(pl.shapes||[]).some(s=>s.ref)?`<span><span class="dt" style="border-style:dashed"></span>โซนอ้างอิงรอบก่อน</span>`:''}</div>`;
   const list=ds.length?`<div class="pl">${ds.map(d=>`<div><b class="mono">${esc(pinLabel(d))}</b> ${esc(d.area||'')} ${esc(d.surface||'')} ${esc(d.face||'')} — ${esc(d.type||'')}</div>`).join('')}</div>`:'';
   const head=pageHead(r,'แบบแสดงขอบเขต / ตำแหน่งที่ส่งตรวจ',`${pl.name} · ${S.project.name} · ${r.workType} · ${fmtDate(r.date)}`);

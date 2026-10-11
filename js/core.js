@@ -125,13 +125,14 @@ function shapeSvg(s,i,U,inter,nolabel){
   return'';
 }
 function pinSvg(p,U,inter){
+  U=U*.65;   // ค่าเริ่มต้นหมุดเล็กลงให้พอดีกับแผ่นกระเบื้อง ปรับเพิ่มเติมได้ด้วยแถบ “ขนาดสัญลักษณ์”
   const col=p.st==='closed'?'#2f9e44':p.st==='fixed'?'#f08c00':'#e03131';
   return`<g ${inter?`data-pin="${p.id}" style="cursor:pointer"`:''}><circle cx="${p.x}" cy="${p.y}" r="${27*U}" fill="${col}" fill-opacity=".12" stroke="${col}" stroke-width="${2*U}" stroke-dasharray="${6*U} ${4*U}"/><circle cx="${p.x}" cy="${p.y}" r="${15*U}" fill="${col}" stroke="#fff" stroke-width="${2.5*U}"/><text x="${p.x}" y="${p.y}" font-size="${10.5*U}" font-weight="700" fill="#fff" text-anchor="middle" dominant-baseline="central" pointer-events="none">${esc(p.label)}</text></g>`;
 }
 const unitOf=(w,h)=>Math.max(w,h)/1000;
 /* static image + annotations, as an <svg> string */
 function annotatedSvg(imgUrl,w,h,shapes,pins,opts={}){
-  const U=unitOf(w,h);const vb=opts.viewBox||[0,0,w,h];
+  const U=unitOf(w,h)*(opts.scale||1);const vb=opts.viewBox||[0,0,w,h];
   return`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.join(' ')}" preserveAspectRatio="xMidYMid meet" ${opts.style?`style="${opts.style}"`:'style="width:100%;height:100%;display:block"'}><image href="${imgUrl}" x="0" y="0" width="${w}" height="${h}"/>${(shapes||[]).map((s,i)=>shapeSvg(s,i,U,false,opts.labels===false)).join('')}${(pins||[]).map(p=>pinSvg(p,U,false)).join('')}</svg>`;
 }
 
@@ -154,7 +155,7 @@ function armBtn(btn,label,run){
 
 /* ========= Board: pan/zoom SVG editor for plans and photos ========= */
 function openBoard(cfg){
-  const {w,h}=cfg;const U=unitOf(w,h);
+  const {w,h}=cfg;const H=unitOf(w,h);let SC=cfg.scale?cfg.scale():1;let U=H*SC;
   const photo=cfg.kind==='photo';const ro=!!cfg.ro;
   const tools=ro?[['pan','เลื่อน / ซูม']]:photo?[['select','เลือก/ย้าย'],['pen','ปากกา'],['arrow','ลูกศร'],['rect','กรอบ'],['ell','วงรี'],['text','ข้อความ'],['pan','เลื่อนภาพ']]
     :[['select','เลือก/ย้าย'],['zone','วาดโซน'],['rect','โซนสี่เหลี่ยม'],['text','ข้อความ'],['pin','ปักหมุด DEFECT'],['pan','เลื่อนแบบ']];
@@ -168,6 +169,7 @@ function openBoard(cfg){
      <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
      ${ro?'':COLORS.map(c=>`<button class="sw" data-color="${c}" style="background:${c}" aria-pressed="false" aria-label="สี ${c}"></button>`).join('')}
      ${photo&&!ro?`<label class="small muted row" style="gap:4px">หนา<input type="range" min="1" max="10" value="${sw}" id="bsw" style="width:90px"></label>`:''}
+     ${!photo&&!ro&&cfg.onScale?`<label class="small muted row" style="gap:4px" title="ปรับขนาดหมุด ตัวอักษร และเส้นในแบบนี้">ขนาดสัญลักษณ์<input type="range" min="8" max="250" value="${Math.round(SC*100)}" id="bsym" style="width:110px"><b class="mono" id="bsymv">${Math.round(SC*100)}%</b></label>`:''}
      <span style="margin-left:auto" class="row"><button class="tool" data-a="zout">−</button><button class="tool" data-a="zin">＋</button><button class="tool" data-a="fit">พอดีจอ</button></span></div>
    <div class="bmain" id="bmain"><svg id="bsvg" xmlns="http://www.w3.org/2000/svg"><image href="${cfg.imgUrl}" x="0" y="0" width="${w}" height="${h}"/><g id="gx" style="pointer-events:none"></g><g id="gs"></g><g id="gp"></g><g id="gu"></g></svg></div>
    <div class="binsp" id="binsp"></div>`,'board');if(cfg.stampRO!==undefined)o.dataset.ro=cfg.stampRO?'1':'0';
@@ -186,11 +188,11 @@ function openBoard(cfg){
     gs.innerHTML=shapes.map((s,i)=>shapeSvg(s,i,U,true)).join('');
     gp.innerHTML=(cfg.pins?cfg.pins():[]).map(p=>pinSvg(p,U,true)).join('');
     let u='';
-    if(sel>=0&&shapes[sel]){const s=shapes[sel];const hs=7*U;const hnd=(x,y,k)=>`<circle data-v="${k}" cx="${x}" cy="${y}" r="${hs}" fill="#fff" stroke="#1971c2" stroke-width="${2*U}" style="cursor:grab"/>`;
+    if(sel>=0&&shapes[sel]){const s=shapes[sel];const hs=7*H;const hnd=(x,y,k)=>`<circle data-v="${k}" cx="${x}" cy="${y}" r="${hs}" fill="#fff" stroke="#1971c2" stroke-width="${2*H}" style="cursor:grab"/>`;
       if(s.t==='poly')u+=s.pts.map((p,k)=>hnd(p[0],p[1],k)).join('');
       else if(s.t==='arrow')u+=hnd(s.x1,s.y1,0)+hnd(s.x2,s.y2,1);
-      else{const b=bbox(s);u+=`<rect x="${b[0]-4*U}" y="${b[1]-4*U}" width="${b[2]-b[0]+8*U}" height="${b[3]-b[1]+8*U}" fill="none" stroke="#1971c2" stroke-width="${1.5*U}" stroke-dasharray="${5*U} ${4*U}" pointer-events="none"/>`}
-      if(s.t==='poly'){const b=bbox(s);u+=`<rect x="${b[0]}" y="${b[1]}" width="${b[2]-b[0]}" height="${b[3]-b[1]}" fill="none" stroke="#1971c2" stroke-width="${1.2*U}" stroke-dasharray="${5*U} ${4*U}" pointer-events="none"/>`}}
+      else{const b=bbox(s);u+=`<rect x="${b[0]-4*H}" y="${b[1]-4*H}" width="${b[2]-b[0]+8*H}" height="${b[3]-b[1]+8*H}" fill="none" stroke="#1971c2" stroke-width="${1.5*H}" stroke-dasharray="${5*H} ${4*H}" pointer-events="none"/>`}
+      if(s.t==='poly'){const b=bbox(s);u+=`<rect x="${b[0]}" y="${b[1]}" width="${b[2]-b[0]}" height="${b[3]-b[1]}" fill="none" stroke="#1971c2" stroke-width="${1.2*H}" stroke-dasharray="${5*H} ${4*H}" pointer-events="none"/>`}}
     if(draft){u+=draftSvg()}
     gu.innerHTML=u;
   }
@@ -317,6 +319,7 @@ function openBoard(cfg){
   });
   o.addEventListener('input',e=>{const t=e.target,s=shapes[sel];
     if(t.id==='bsw'){sw=+t.value;return}
+    if(t.id==='bsym'){SC=+t.value/100;U=H*SC;$('#bsymv',o).textContent=t.value+'%';cfg.onScale&&cfg.onScale(SC);redraw();return}
     if(!s)return;
     if(t.id==='ilabel'){s.label=t.value;redraw()}
     else if(t.id==='iref'){s.ref=t.checked;redraw()}

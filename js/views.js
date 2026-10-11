@@ -230,7 +230,7 @@ function planPins(r,pl){return visibleDefects(r).filter(d=>d.loc&&d.loc.planKey=
 function coverSection(r){
   const c=r.cover;const legacy=c===undefined&&r.plans.length;
   let h=`<div class="panel" style="margin:0 0 14px"><h3>แบบสำหรับใบปะหน้า <span class="small muted" style="font-weight:400">แยกจากแบบที่แนบท้ายเอกสารด้านล่าง</span></h3>`;
-  if(c){h+=`<div class="row" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><div class="card" style="width:270px;flex:none"><div class="thumb" style="aspect-ratio:2/1" data-act="covopen">${annotatedSvg(imgSrc(c.imgId),c.w,c.h,c.shapes||[],[],{viewBox:focusBox(c,[]),labels:false})}</div></div>
+  if(c){h+=`<div class="row" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><div class="card" style="width:270px;flex:none"><div class="thumb" style="aspect-ratio:2/1" data-act="covopen">${annotatedSvg(imgSrc(c.imgId),c.w,c.h,c.shapes||[],[],{viewBox:focusBox(c,[]),labels:false,scale:c.sym})}</div></div>
     <div class="grow" style="display:flex;flex-direction:column;gap:8px;min-width:220px"><input type="text" data-cover="name" value="${esc(c.name||'')}" placeholder="ชื่อแบบ (แสดงใต้รูปในใบปะหน้า)" aria-label="ชื่อแบบปก">
      <div class="row"><button class="btn pri sm" data-act="covopen">ทำสี / ระบุขอบเขตบนแบบปก</button><button class="btn sm" data-act="covpick">เปลี่ยนแบบ</button><button class="btn sm bad" data-act="covdel">ลบแบบปก</button></div>
      <p class="hint" style="margin:0">รูปนี้อยู่เฉพาะในกรอบใบปะหน้า ไม่ถูกพิมพ์เป็นหน้าแบบ · ระบบซูมให้พอดีกับโซนสีที่วาด</p></div></div>`}
@@ -241,7 +241,7 @@ function coverSection(r){
 function setCover(r,lib){const old=r.cover;r.cover={libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:old&&old.w===lib.w&&old.h===lib.h?old.shapes:[]};save()}
 function openCover(r){
   const c=r.cover;if(!c)return;
-  openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,onChange:save,onClose:()=>refreshTab()});
+  openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,scale:()=>c.sym||1,onScale:v=>{c.sym=v;save()},onChange:save,onClose:()=>refreshTab()});
 }
 function tabPlans(r){
   let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ และปักหมุดตำแหน่ง DEFECT</span></div>`;
@@ -249,7 +249,7 @@ function tabPlans(r){
   h+=`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">`;
   for(const pl of r.plans){
     const legend=[...new Map((pl.shapes||[]).filter(s=>s.t==='poly'&&s.label).map(s=>[s.c+s.label,s])).values()];
-    h+=`<div class="card"><div class="thumb" data-act="openplan" data-id="${pl.id}">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,planPins(r,pl))}</div><div class="body">
+    h+=`<div class="card"><div class="thumb" data-act="openplan" data-id="${pl.id}">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,planPins(r,pl),{scale:pl.sym})}</div><div class="body">
      <input type="text" data-plan="${pl.id}" data-k="name" value="${esc(pl.name)}" aria-label="ชื่อแบบ">
      <div class="small muted">${legend.length?legend.map(s=>`<span class="dot" style="background:${s.c}"></span> ${esc(s.label)}`).join(' &nbsp; '):'ยังไม่มีโซนสี'}</div>
      <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">ทำสี / ปักหมุด</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`}
@@ -275,7 +275,7 @@ function planPicker(r,cb){
   o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files]);if(libs.length){if(cb)cb(libs[0]);else{libs.forEach(l=>attachPlan(r,l));toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว')}o.remove();refreshTab();save()}}});
 }
 function openPlan(r,pl,pinFor){
-  const board=openBoard({kind:'plan',ro:MODE.ro,title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,
+  const board=openBoard({kind:'plan',ro:MODE.ro,title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,scale:()=>pl.sym||1,onScale:v=>{pl.sym=v;save()},
     onChange:save,pins:()=>planPins(r,pl),
     onPinMove:()=>save(),
     onPinClick:(id,redraw)=>{const d=defectById(id);if(d)editDefect(d,{req:r,canDelete:d.foundIn===r.id,after:(closed)=>{redraw();},pin:dd=>{board.close();openPlan(r,pl,dd)}})},
