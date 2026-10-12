@@ -106,9 +106,16 @@ const natCmp=(a,b)=>String(a==null?'':a).localeCompare(String(b==null?'':b),'th'
 const NOROOM='ไม่ระบุห้อง';
 const roomOf=d=>(d.area||'').trim()||NOROOM;
 const zoneCount=d=>d&&d.zone?(+d.count||(d.grid&&d.grid.cells?d.grid.cells.length:0)||0):0;
-function groupRooms(ds){
-  const m=new Map();ds.forEach(d=>{const k=roomOf(d);if(!m.has(k))m.set(k,[]);m.get(k).push(d)});
-  return[...m.entries()].sort((a,b)=>a[0]===NOROOM?1:b[0]===NOROOM?-1:natCmp(a[0],b[0])).map(([room,list])=>({room,list:list.sort((x,y)=>natCmp(x.code,y.code))}));
+const NOITEM='ไม่ระบุหมวดงาน';
+function itemOrder(){const m=new Map();let i=0;(S.project.checklist||[]).forEach(g=>g.items.forEach(it=>m.set(it.id,{i:i++,t:it.en+(it.th?' · '+it.th:'')})));return m}
+/* จัดกลุ่ม DEFECT: mode 'room' = ตามห้อง/พื้นที่, 'item' = ตามหมวดงาน (หัวข้อ Checklist) แล้วเรียงตามชื่อ/รหัส DEFECT ในแต่ละกลุ่ม */
+function groupRooms(ds,mode){
+  const im=mode==='item'?itemOrder():null;const m=new Map();
+  const keyOf=d=>mode==='item'?((im.get(d.item)||{}).t||NOITEM):roomOf(d);
+  ds.forEach(d=>{const k=keyOf(d);if(!m.has(k))m.set(k,[]);m.get(k).push(d)});
+  const none=mode==='item'?NOITEM:NOROOM;
+  const ord=k=>mode==='item'?(([...im.values()].find(v=>v.t===k)||{}).i):0;
+  return[...m.entries()].sort((a,b)=>a[0]===none?1:b[0]===none?-1:mode==='item'?(ord(a[0])-ord(b[0])):natCmp(a[0],b[0])).map(([room,list])=>({room,mode:mode||'room',list:list.sort((x,y)=>natCmp(x.code,y.code))}));
 }
 const defectsOn=r=>r.type==='CLOSE'||visibleDefects(r).length>0;   // ใบ OPEN ไม่มีรายการ DEFECT (ยกเว้นข้อมูลเก่าที่มีอยู่แล้ว)
 const plansSorted=r=>[...(r.plans||[])].sort((a,b)=>natCmp(a.name,b.name));
@@ -197,7 +204,7 @@ function openBoard(cfg){
     :[['select','เลือก/ย้าย'],['zone','วาดโซน'],['rect','โซนสี่เหลี่ยม'],['text','ข้อความ'],['pin','ปักหมุด DEFECT'],['pan','เลื่อนแบบ']];
   if(cfg.noPin&&!photo&&!ro){const i=tools.findIndex(t=>t[0]==='pin');if(i>=0)tools.splice(i,1)}
   let tool=ro?'pan':(cfg.tool||'select'),color=photo?'#e03131':COLORS[0],sw=photo?3:3,sel=-1,vtx=null;
-  let view={x:0,y:0,w:w,h:h};let draft=null;let undo=[];let drag=null;const ptrs=new Map();let pinch=null;
+  let view={x:0,y:0,w:w,h:h};let draft=null;let undo=[];let drag=null;const ptrs=new Map();let pinch=null;let lastPen=0;const palm=new Set();
   const shapes=cfg.shapes;
   const o=overlay(`
    <div class="obar"><h2>${esc(cfg.title)}</h2>${cfg.header||''}<span class="small muted" id="bhint"></span>${ro?'':'<button class="btn" data-a="undo">↶ ย้อนกลับ</button>'}<button class="btn pri" data-a="close">เสร็จ</button></div>
@@ -279,9 +286,12 @@ function openBoard(cfg){
   /* pointer handling */
   svg.addEventListener('wheel',e=>{e.preventDefault();const p=toPt(e);zoomAt(e.deltaY>0?1.15:1/1.15,p[0],p[1])},{passive:false});
   svg.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='pen')lastPen=Date.now();
+    /* กันฝ่ามือ: ขณะใช้ปากกา (Apple Pencil) การสัมผัสด้วยนิ้ว/ฝ่ามือไม่นับ ไม่งั้นเส้น/ลูกศรที่กำลังวาดจะหายหรือเพี้ยน */
+    if(e.pointerType==='touch'&&!ro&&Date.now()-lastPen<1500){palm.add(e.pointerId);return}
     try{svg.setPointerCapture(e.pointerId)}catch(x){}
-    if(e.isPrimary)ptrs.clear();   // กันตัวชี้ค้างจากนิ้วที่ระบบกลืน event ไป ทำให้ซูมเพี้ยนด้วยนิ้วเดียว
-    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(e.isPrimary)for(const[k,v]of[...ptrs])if(v.t===e.pointerType)ptrs.delete(k);   // กันตัวชี้ค้างของชนิดเดียวกัน
+    ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,t:e.pointerType});
     if(ptrs.size===2){if(drag){if(drag.m==='pin'&&drag.moved&&drag.orig){const d0=defectById(drag.id);if(d0&&d0.loc){d0.loc.x=drag.orig.x;d0.loc.y=drag.orig.y}}else if((drag.m==='move'||drag.m==='vtx')&&undo.length){shapes.splice(0,shapes.length,...JSON.parse(undo.pop()))}redraw()}
       const a=[...ptrs.values()];pinch={d:Math.hypot(a[0].x-a[1].x,a[1].y-a[0].y),view:{...view},mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2};drag=null;if(draft&&draft.t!=='poly')draft=null;return}
     const p=toPt(e);const t=e.target;const vi=t.closest&&t.closest('[data-v]');const si=t.closest&&t.closest('[data-i]');let pi=t.closest&&t.closest('[data-pin]');
@@ -309,7 +319,9 @@ function openBoard(cfg){
     if(tool==='pin'){cfg.onPinAdd&&cfg.onPinAdd(p[0],p[1],redraw);return}
   });
   svg.addEventListener('pointermove',e=>{
-    if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(e.pointerType==='pen')lastPen=Date.now();
+    if(palm.has(e.pointerId))return;
+    if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,t:e.pointerType});
     if(pinch&&ptrs.size>=2){const a=[...ptrs.values()];const d=Math.hypot(a[0].x-a[1].x,a[1].y-a[0].y);const k=pinch.d/Math.max(d,1);
       const r=svg.getBoundingClientRect();const mx=(a[0].x+a[1].x)/2,my=(a[0].y+a[1].y)/2;
       const pv=pinch.view;const sc0=Math.max(pv.w/r.width,pv.h/r.height);const ox0=(r.width-pv.w/sc0)/2,oy0=(r.height-pv.h/sc0)/2;
@@ -340,6 +352,8 @@ function openBoard(cfg){
     if(d.t==='arrow')return{t:'arrow',x1:d.x0,y1:d.y0,x2:d.x1,y2:d.y1,c:color,sw};
   }
   function up(e){
+    if(e.pointerType==='pen')lastPen=Date.now();
+    if(palm.delete(e.pointerId))return;
     ptrs.delete(e.pointerId);
     if(pinch&&ptrs.size<2){pinch=null;if(ptrs.size===1){const q=[...ptrs.values()][0];drag={m:'pan',sx:q.x,sy:q.y,v:{...view},pinId:null,moved:true}}return}
     if(!drag){return}
@@ -393,3 +407,10 @@ function openBoard(cfg){
   return{el:o,redraw,close,setTool:t=>{tool=t;updateTools()}};
 }
 // rect tool in plan mode makes a poly zone (handled in mk via photo flag)
+
+/* รูปตอนตรวจเปิด ที่ใบส่งปิดดึงมาแนบ (ไม่รวมรูปผูก DEFECT ซึ่งไปอยู่ในแถว DEFECT แล้ว; ยกเว้นได้ด้วย r.openExclude) */
+function openPhotosFor(r){
+  if(r.type!=='CLOSE')return[];const root=reqById(rootId(r));if(!root||root.id===r.id)return[];
+  return(root.photos||[]).filter(p=>!p.defectId&&!(r.openExclude||[]).includes(p.id));
+}
+const photoTotal=r=>(r.photos||[]).length+openPhotosFor(r).length;

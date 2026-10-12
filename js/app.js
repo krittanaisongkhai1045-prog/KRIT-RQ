@@ -66,9 +66,10 @@ function onMainInput(e){
   const t=e.target;
   if(qcInput(t))return;
   if(t.id==='grp'){UI.grp=t.value;try{localStorage.setItem('grp',t.value)}catch(x){}$('#main').innerHTML=viewList();return}
-  if(MODE.ro&&!['q','dq','dfilter'].includes(t.id))return;
+  if(MODE.ro&&!['q','dq','dfilter','dgroup'].includes(t.id))return;
   if(t.id==='q'){UI.q=t.value;const p=t.selectionStart;$('#main').innerHTML=viewList();const q=$('#q');q.focus();q.setSelectionRange(p,p);return}
   if(t.id==='dq'){UI.dq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewDefects();const q=$('#dq');q.focus();q.setSelectionRange(p,p);return}
+  if(t.id==='dgroup'){UI.dgroup=t.value;$('#main').innerHTML=viewDefects();return}
   if(t.id==='dfilter'){UI.dfilter=t.value;$('#main').innerHTML=viewDefects();return}
   const r=UI.route==='req'?curReq():null;
   if(t.dataset.kinds){S.project.kinds=parseKinds(t.value);save();return}
@@ -86,6 +87,8 @@ function onMainInput(e){
   if(t.dataset.photo&&r){const p=r.photos.find(x=>x.id===t.dataset.photo);p[t.dataset.k]=t.value;save();return}
   if(t.dataset.res&&r){r.res=r.res||{};(r.res[t.dataset.res]=r.res[t.dataset.res]||{}).note=t.value;save();return}
   if(t.dataset.scope&&r){r.scope=r.scope||[];const i=r.scope.indexOf(t.dataset.scope);if(t.checked&&i<0)r.scope.push(t.dataset.scope);if(!t.checked&&i>=0)r.scope.splice(i,1);save();refreshTab();return}
+  if(t.dataset.oex&&r){r.openExclude=r.openExclude||[];const i=r.openExclude.indexOf(t.dataset.oex);if(t.checked&&i>=0)r.openExclude.splice(i,1);if(!t.checked&&i<0)r.openExclude.push(t.dataset.oex);save();refreshTab();return}
+  if(t.dataset.defgroup&&r){r.defGroup=t.value;save();refreshTab();return}
   if(t.dataset.lib){S.library.find(l=>l.id===t.dataset.lib).name=t.value;save();return}
   if(t.dataset.cg){const g=S.project.checklist.find(x=>x.id===t.dataset.cg);if(t.dataset.k==='label')g.label=t.value;else g.items=parseGroup(g,t.value);save();return}
   if(t.dataset.list){S.project[t.dataset.list]=t.value.split('\n').map(x=>x.trim()).filter(Boolean);save();return}

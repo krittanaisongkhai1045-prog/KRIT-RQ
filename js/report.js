@@ -143,7 +143,7 @@ function locCropSvg(d,pl,z){
 }
 function defectPagesHTML(r){
   const vis0=visibleDefects(r);if(!vis0.length||!defectsOn(r))return[];
-  const groups=groupRooms(vis0);const vis=groups.flatMap(g=>g.list);const pages=[];
+  const groups=groupRooms(vis0,r.defGroup||'room');const vis=groups.flatMap(g=>g.list);const pages=[];
   const rowHTML=d=>{
       const ph=defectPhotos(r,d);const res=r.res&&r.res[d.id]&&r.res[d.id].r;
       const im=(p,lab)=>`<div class="pth"><div class="im">${p?annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[]):'—'}</div><div class="cp">${lab}${p&&p.caption?': '+esc(p.caption):''}</div></div>`;
@@ -159,7 +159,7 @@ function defectPagesHTML(r){
   const flush=()=>{if(cur.length)pg.push(cur);cur=[];h=0;last=null};
   for(const g of groups){const tiles=g.list.reduce((n,x)=>n+zoneCount(x),0);
     g.list.forEach((d,i)=>{if(h+ROW+(last!==g.room?BAND:0)>CAP)flush();
-      if(last!==g.room){cur.push(`<div class="rmband">ห้อง/พื้นที่: <b>${esc(g.room)}</b>${i>0?' (ต่อ)':''} · ${g.list.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</div>`);h+=BAND;last=g.room}
+      if(last!==g.room){cur.push(`<div class="rmband">${g.mode==='item'?'หมวดงาน':'ห้อง/พื้นที่'}: <b>${esc(g.room)}</b>${i>0?' (ต่อ)':''} · ${g.list.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</div>`);h+=BAND;last=g.room}
       cur.push(rowHTML(d));h+=ROW})}
   flush();
   pg.forEach(rows=>pages.push(`<div class="pg">${pageHead(r,r.type==='CLOSE'?'ใบรายการ DEFECT ที่แก้ไข (ส่งตรวจซ้ำเฉพาะจุด)':'ใบรายการ DEFECT ที่พบ',`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${vis.length} จุด`)}${rows.join('')}<div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`));
@@ -167,25 +167,37 @@ function defectPagesHTML(r){
 }
 /* รูป DEFECT ที่แสดงในรายการ DEFECT แล้ว ไม่ต้องซ้ำในหน้ารูปประกอบ */
 function shownDefectPhotoIds(r){const s=new Set();visibleDefects(r).forEach(d=>{const x=defectPhotos(r,d);if(x.before)s.add(x.before.id);if(x.after)s.add(x.after.id)});return s}
-function photoPagesHTML(r){
-  const pages=[];const shown=shownDefectPhotoIds(r);const ph=r.photos.filter(p=>!shown.has(p.id));
-  for(let i=0;i<ph.length;i+=4){
-    const cells=ph.slice(i,i+4).map((p,k)=>{const d=p.defectId&&defectById(p.defectId);
-      return`<div class="pcell"><div class="im">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="cp"><b>รูปที่ ${r.photos.indexOf(p)+1}</b>${d?`<span class="tag">${esc(pinLabel(d))}</span>`:''}${p.stage?`<span class="tag">${p.stage==='before'?'ก่อนแก้':'หลังแก้'}</span>`:''} ${esc(p.caption||'')}</div></div>`}).join('');
-    pages.push(`<div class="pg">${pageHead(r,'รูปประกอบการตรวจสอบ',`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${fmtDate(r.date)}`)}<div class="pgrid">${cells}</div><div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`);
+/* หน้ารูป: list = [{p,n}] n = เลขรูปในเอกสารต้นทาง */
+function photoGridPages(r,list,title){
+  const pages=[];
+  for(let i=0;i<list.length;i+=4){
+    const cells=list.slice(i,i+4).map(({p,n})=>{const d=p.defectId&&defectById(p.defectId);
+      return`<div class="pcell"><div class="im">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="cp"><b>รูปที่ ${n}</b>${d?`<span class="tag">${esc(pinLabel(d))}</span>`:''}${p.stage?`<span class="tag">${p.stage==='before'?'ก่อนแก้':'หลังแก้'}</span>`:''} ${esc(p.caption||'')}</div></div>`}).join('');
+    pages.push(`<div class="pg">${pageHead(r,title,`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${fmtDate(r.date)}`)}<div class="pgrid">${cells}</div><div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`);
   }
   return pages;
 }
+/* รูปของใบนี้ (ไม่รวมรูปที่แสดงในแถว DEFECT แล้ว): OPEN = สภาพหน้างานก่อนตรวจ, CLOSE = รูปตอนตรวจปิด */
+function photoPagesHTML(r){
+  const shown=shownDefectPhotoIds(r);
+  return photoGridPages(r,r.photos.filter(p=>!shown.has(p.id)).map(p=>({p,n:r.photos.indexOf(p)+1})),r.type==='CLOSE'?'รูปตอนตรวจปิด':'รูปสภาพหน้างานก่อนตรวจ');
+}
+/* ใบส่งปิด: รูปตอนตรวจเปิดจากใบ OPEN */
+function openPhotoPagesHTML(r){
+  const root=reqById(rootId(r));if(r.type!=='CLOSE'||!root)return[];
+  return photoGridPages(r,openPhotosFor(r).map(p=>({p,n:root.photos.indexOf(p)+1})),`รูปตอนตรวจเปิด (อ้างอิง ${root.no})`);
+}
 function buildReport(r){
   let pages=[{land:false,html:formHTML(r)}];
-  plansSorted(r).forEach(pl=>pages.push(planPageHTML(r,pl)));
-  defectPagesHTML(r).forEach(h=>pages.push({land:false,html:h}));
-  photoPagesHTML(r).forEach(h=>pages.push({land:false,html:h}));
+  const pl=()=>plansSorted(r).forEach(x=>pages.push(planPageHTML(r,x)));
+  const add=arr=>arr.forEach(h=>pages.push({land:false,html:h}));
+  if(r.type==='CLOSE'){add(openPhotoPagesHTML(r));pl();add(defectPagesHTML(r));add(photoPagesHTML(r))}   // ใบส่งปิด: รูปตอนตรวจเปิด → แบบ+ตำแหน่ง DEFECT → รายการ DEFECT+รูป → รูปตอนตรวจปิด
+  else{add(photoPagesHTML(r));pl();add(defectPagesHTML(r))}                                              // ใบส่งเปิด: ใบปะหน้า → รูปก่อนตรวจ → แบบ
   const N=pages.length;pages=pages.map((p,i)=>({land:p.land,html:p.html.replace('%%P%%',i+1).replace('%%N%%',N)}));
   return{pages};
 }
 async function reportImages(r){
-  const ids=[];if(r.cover)ids.push(r.cover.imgId);r.plans.forEach(p=>ids.push(p.imgId));r.photos.forEach(p=>ids.push(p.imgId));
+  const ids=[];if(r.cover)ids.push(r.cover.imgId);r.plans.forEach(p=>ids.push(p.imgId));r.photos.forEach(p=>ids.push(p.imgId));openPhotosFor(r).forEach(p=>ids.push(p.imgId));
   await ensureData(ids);await ensureData([S.project.logoId,S.project.sigId,S.project.reqSigId,S.project.engSigId],true);
 }
 async function exportPDF(){

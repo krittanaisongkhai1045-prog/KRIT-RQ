@@ -141,7 +141,16 @@ function applyRows(data){
 async function reloadCloud(){try{await loadCloud();render()}catch(e){toast('โหลดข้อมูลไม่สำเร็จ: '+((e&&e.message)||e),5000)}}
 let rerenderT=null;
 function schedRerender(){clearTimeout(rerenderT);rerenderT=setTimeout(()=>{if($('.ov')){schedRerender();return}render()},600)}
+/* ระหว่างเปิดกระดานวาด/หน้าต่างแก้ไข ห้ามสลับอ็อบเจกต์ข้อมูลใต้เท้า (ไม่งั้นเส้น/ลูกศรที่วาดต่อจะไปลงอ็อบเจกต์เก่าแล้วหาย) */
 function applyRemote(ev,n,o){
+  if(typeof document!=='undefined'&&document.querySelector('.ov')){(MODE.defer=MODE.defer||[]).push([ev,n,o]);clearTimeout(MODE.dt);MODE.dt=setTimeout(flushDefer,800);return}
+  applyRemoteNow(ev,n,o);
+}
+function flushDefer(){
+  if(document.querySelector('.ov')){MODE.dt=setTimeout(flushDefer,800);return}
+  const q=MODE.defer||[];MODE.defer=[];q.forEach(a=>applyRemoteNow(...a));
+}
+function applyRemoteNow(ev,n,o){
   const row=ev==='DELETE'?o:n;if(!row||!row.collection)return;const key=row.collection+'/'+row.id;
   const put=(arr,obj)=>{const i=arr.findIndex(x=>x.id===obj.id);i>=0?arr[i]=obj:arr.push(obj)};
   const arrOf=c=>c==='requests'?S.requests:c==='defects'?S.defects:c==='plans'?S.library:null;
@@ -280,7 +289,7 @@ async function netRetry(){
   try{
     for(const id of [...PEND]){if(INFL.has(id))continue;const url=IMGDATA.get(id)||await obGet('img',id);if(url)queueImage(id,url);else PEND.delete(id)}
     if(MODE.uid){MODE.dirty=false;await cloudFlush()}
-    if(MODE.offline||MODE.netFail){await loadCloudKeepLocal();MODE.offline=false;MODE.netFail=0;render();toast('กลับมาออนไลน์แล้ว ส่งงานที่ค้างเรียบร้อย',4000)}
+    if(MODE.offline||MODE.netFail){if(document.querySelector('.ov'))throw new Error('busy');await loadCloudKeepLocal();MODE.offline=false;MODE.netFail=0;render();toast('กลับมาออนไลน์แล้ว ส่งงานที่ค้างเรียบร้อย',4000)}
   }catch(e){bad=true}
   MODE.retrying=false;
   if(bad||MODE.netFail||PEND.size){if(bad)scheduleRetry()}else MODE.rn=0;

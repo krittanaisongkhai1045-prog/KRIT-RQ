@@ -21,7 +21,7 @@ function pickKind(role,cb){
 }
 function go(route,id,tab){if(route!==UI.route){UI.siteFile=null;UI.siteEdit=null}UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
 
-function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
+function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','dgroup','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
 function render(){
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
@@ -100,16 +100,17 @@ function makeClose(rid,num0,kind){
 function viewDefects(){
   const f=UI.dfilter;const q=(UI.dq||'').toLowerCase();
   let ds=S.defects.filter(d=>!d.qc).map(d=>({d,st:defectStatus(d)})).filter(x=>(f==='all'||(f==='open'?x.st!=='closed':f==='need'?x.st==='open':x.st===f))&&(!q||[x.d.code,x.d.area,x.d.type,x.d.desc].join(' ').toLowerCase().includes(q)));
-  ds.sort((a,b)=>(roomOf(a.d)===NOROOM)-(roomOf(b.d)===NOROOM)||natCmp(roomOf(a.d),roomOf(b.d))||natCmp(a.d.code,b.d.code));
+  
   let h=`<div class="row" style="margin-bottom:12px"><h1 style="font-size:22px;margin-right:auto">DEFECT ตามใบตรวจ</h1>
    <select id="dfilter" style="width:auto">${[['open','ค้างแก้ / รอผล'],['need','ต้องแก้ไข'],['submitted','รอผลตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
-   <input type="search" id="dq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.dq||'')}" style="width:220px"></div>`;
+   <select id="dgroup" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(UI.dgroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><input type="search" id="dq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.dq||'')}" style="width:220px"></div>`;
   if(!ds.length)return h+`<div class="empty">ไม่มี DEFECT ในมุมมองนี้</div>`;
   h+=`<div class="tw"><table class="t"><thead><tr><th>รหัส</th><th>สถานะ</th><th>ห้อง / ตำแหน่ง</th><th>ประเภท</th><th>ตำแหน่งกระเบื้อง</th><th>วิธีแก้เฉพาะจุด</th><th>พบใน</th></tr></thead><tbody>`;
-  let lastRoom=null;
-  for(const x of ds){const d=x.d;const fr=reqById(d.foundIn);
-    if(roomOf(d)!==lastRoom){lastRoom=roomOf(d);const same=ds.filter(y=>roomOf(y.d)===lastRoom);const tiles=same.reduce((n,y)=>n+zoneCount(y.d),0);h+=`<tr class="rmtr"><td colspan="7"><b>${esc(lastRoom)}</b> <span class="small muted">${same.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</span></td></tr>`}
-    h+=`<tr style="cursor:pointer" data-act="editdef" data-id="${d.id}"><td class="mono"><b>${esc(d.code)}</b>${d.zone?' <span class="chip warn">โซน</span>':''}</td><td>${chip(STATUS_TXT[x.st],STATUS_CLS[x.st])}</td><td>${esc(d.area)} ${esc(d.surface||'')} ${esc(d.face||'')}</td><td>${esc(d.type)}${d.zone?` · ${zoneCount(d)} แผ่น`:''}</td><td class="small">${esc(gridText(d.grid))||'<span class="muted">—</span>'}</td><td class="small">${esc(d.fix)}</td><td class="small mono">${fr?esc(fr.no):''}</td></tr>`}
+  const stOf=new Map(ds.map(x=>[x.d.id,x.st]));const mode=UI.dgroup||'room';
+  for(const gp of groupRooms(ds.map(x=>x.d),mode)){
+    const tiles=gp.list.reduce((n,y)=>n+zoneCount(y),0);h+=`<tr class="rmtr"><td colspan="7"><b>${esc(gp.room)}</b> <span class="small muted">${gp.list.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</span></td></tr>`;
+  for(const d of gp.list){const x={d,st:stOf.get(d.id)};const fr=reqById(d.foundIn);
+    h+=`<tr style="cursor:pointer" data-act="editdef" data-id="${d.id}"><td class="mono"><b>${esc(d.code)}</b>${d.zone?' <span class="chip warn">โซน</span>':''}</td><td>${chip(STATUS_TXT[x.st],STATUS_CLS[x.st])}</td><td>${esc(d.area)} ${esc(d.surface||'')} ${esc(d.face||'')}</td><td>${esc(d.type)}${d.zone?` · ${zoneCount(d)} แผ่น`:''}</td><td class="small">${esc(gridText(d.grid))||'<span class="muted">—</span>'}</td><td class="small">${esc(d.fix)}</td><td class="small mono">${fr?esc(fr.no):''}</td></tr>`}}
   return h+`</tbody></table></div>`;
 }
 
@@ -201,7 +202,7 @@ const REQ_ST=[['draft','ร่าง'],['sent','ส่งตรวจแล้�
 const reqStatus=r=>r.cancelled?'cancelled':r.result==='approved'?'approved':r.result==='disapproved'?'disapproved':r.sent?'sent':'draft';
 function setReqStatus(r,v){r.cancelled=v==='cancelled';r.sent=v==='sent'||v==='approved'||v==='disapproved';r.result=v==='approved'?'approved':v==='disapproved'?'disapproved':''}
 function viewReq(){
-  const r=curReq();const cs=chainState(rootId(r));const tabs=[['info','ข้อมูลเอกสาร'],['plans','แบบ / ขอบเขต',r.plans.length],['photos','รูปตรวจ',r.photos.length,r.photos.length>=4?'good':'bad'],...(defectsOn(r)?[['defects','รายการ DEFECT',visibleDefects(r).length,r.type==='CLOSE'&&!visibleDefects(r).length?'bad':'']]:[]),['preview','เอกสารพร้อมส่ง']];
+  const r=curReq();const cs=chainState(rootId(r));const tabs=[['info','ข้อมูลเอกสาร'],['plans','แบบ / ขอบเขต',r.plans.length],['photos',r.type==='OPEN'?'รูปก่อนตรวจ':'รูปตรวจเปิด/ปิด',photoTotal(r),photoTotal(r)>=4?'good':'bad'],...(defectsOn(r)?[['defects','รายการ DEFECT',visibleDefects(r).length,r.type==='CLOSE'&&!visibleDefects(r).length?'bad':'']]:[]),['preview','เอกสารพร้อมส่ง']];
   if(UI.tab==='defects'&&!defectsOn(r))UI.tab='info';
   return`<div class="row" style="margin-bottom:10px"><button class="btn sm" data-go="list">← รายการ</button><h1 style="font-size:20px" class="mono">${esc(r.no)}</h1>${chip(r.type==='OPEN'?kindLabel(r):kindLabel(r)+' รอบ '+r.round,r.type==='OPEN'?'open':'close')}${chip(cs.t,cs.k)}
    <span style="margin-left:auto" class="row"><label class="row small muted" style="gap:6px">สถานะเอกสาร<select data-reqstatus="1" style="width:auto;color:var(--fg)">${REQ_ST.map(o=>`<option value="${o[0]}" ${reqStatus(r)===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${r.type==='OPEN'?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ สร้างใบส่งปิด (CLOSE)</button>`:r.type==='CLOSE'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ รอบส่งซ้ำถัดไป</button>`:''}</span></div>
@@ -213,7 +214,7 @@ function viewReq(){
 function afterReq(){if(UI.tab==='preview')drawPreview()}
 function refreshTab(){const r=curReq();const el=$('#tabbody');if(!el)return;el.innerHTML=UI.tab==='info'?tabInfo(r):UI.tab==='plans'?tabPlans(r):UI.tab==='photos'?tabPhotos(r):UI.tab==='defects'?tabDefects(r):tabPreview(r);
   // refresh tab counters without full re-render
-  $$('.tabs .n').forEach(n=>{const t=n.parentElement.dataset.tab;const v=t==='plans'?r.plans.length:t==='photos'?r.photos.length:t==='defects'?visibleDefects(r).length:null;if(v!=null){n.textContent=v+(t==='photos'?'/4':'');if(t==='photos')n.className='n '+(v>=4?'good':'bad')}});
+  $$('.tabs .n').forEach(n=>{const t=n.parentElement.dataset.tab;const v=t==='plans'?r.plans.length:t==='photos'?photoTotal(r):t==='defects'?visibleDefects(r).length:null;if(v!=null){n.textContent=v+(t==='photos'?'/4':'');if(t==='photos')n.className='n '+(v>=4?'good':'bad')}});
   if(UI.tab==='preview')drawPreview();if(MODE.ro)lockUI()}
 
 const RSYM={P:'✓',F:'✗',N:'N/A','':'·'};
@@ -358,10 +359,15 @@ async function addPhotoFiles(r,files,defectId,stage){
   if(n){save();refreshTab();toast(`เพิ่มรูป ${n} รูป`)}
 }
 function tabPhotos(r){
-  const ds=visibleDefects(r);
-  let h=`<div class="row" style="margin-bottom:10px"><label class="btn pri" for="photofile">＋ เพิ่มรูป / ถ่ายรูป</label><input id="photofile" type="file" accept="image/*" multiple hidden>
-   <span class="chip ${r.photos.length>=4?'good':'bad'}">${r.photos.length>=4?`ครบ ${r.photos.length} รูป`:`ต้องมีอย่างน้อย 4 รูป (มี ${r.photos.length})`}</span><span class="hint" style="margin:0">วางรูปด้วย Ctrl+V ได้ · แตะรูปเพื่อวาดวงกลม ลูกศร หรือเขียนข้อความบนรูป${r.type==='CLOSE'?' · รอบ CLOSE: ถ่ายรูป “หลังแก้” ของแต่ละจุด':''}</span></div>`;
-  if(!r.photos.length)return h+`<div class="empty">ยังไม่มีรูป เพิ่มรูปหน้างานเพื่อใช้แนบใบตรวจ</div>`;
+  const ds=visibleDefects(r);const isC=r.type==='CLOSE';const tot=photoTotal(r);const opn=isC?(reqById(rootId(r))||{photos:[]}):null;
+  let h='';
+  if(isC&&opn&&opn.id!==r.id){
+    const cand=(opn.photos||[]).filter(p=>!p.defectId);
+    h+=`<div class="panel"><h3>รูปตอนตรวจเปิด <span class="small muted" style="font-weight:400">จากใบ ${esc(opn.no)} · แนบเข้าใบส่งปิดนี้อัตโนมัติ</span></h3>${cand.length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">${cand.map((p,i)=>`<label class="card" style="cursor:pointer"><div class="thumb" style="cursor:inherit">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="body"><span class="chk"><input type="checkbox" data-oex="${p.id}" ${(r.openExclude||[]).includes(p.id)?'':'checked'}> แนบรูปที่ ${(opn.photos.indexOf(p))+1}</span><span class="small muted">${esc(p.caption||'')}</span></div></label>`).join('')}</div>`:'<div class="empty small">ใบ OPEN ยังไม่มีรูป — เพิ่มรูปสภาพหน้างานที่ใบ OPEN</div>'}</div>`}
+  h+=`<div class="row" style="margin-bottom:10px"><label class="btn pri" for="photofile">＋ ${isC?'เพิ่มรูปตอนตรวจปิด':'เพิ่มรูปสภาพหน้างานก่อนตรวจ'} / ถ่ายรูป</label><input id="photofile" type="file" accept="image/*" multiple hidden>
+   <span class="chip ${tot>=4?'good':'bad'}">${tot>=4?`ครบ ${tot} รูป`:`ต้องมีอย่างน้อย 4 รูป (มี ${tot})`}</span><span class="hint" style="margin:0">${isC?'รูปในส่วนนี้คือรูปตอนตรวจปิด · ผูกรูปกับ DEFECT และเลือก “ก่อนแก้/หลังแก้” ให้แต่ละจุด':'รูปสภาพหน้างานก่อนตรวจ'} · วางรูปด้วย Ctrl+V ได้ · แตะรูปเพื่อเขียนบนรูป</span></div>
+   ${isC?'<h3 style="font-size:15px;margin:4px 0 8px">รูปตอนตรวจปิด</h3>':''}`;
+  if(!r.photos.length)return h+`<div class="empty">${isC?'ยังไม่มีรูปตอนตรวจปิด':'ยังไม่มีรูป เพิ่มรูปสภาพหน้างานก่อนตรวจเพื่อแนบใบตรวจ'}</div>`;
   h+=`<div class="cards">`;
   r.photos.forEach((p,i)=>{
     h+=`<div class="card"><div class="thumb" data-act="openphoto" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="body">
@@ -384,9 +390,9 @@ function tabDefects(r){
   if(isC){
     const cand=chainDefects(rid).filter(d=>{const st=defectStatus(d);return st!=='closed'||(r.scope||[]).includes(d.id)});
     h+=`<div class="panel"><h3>เลือกจุดที่ส่งตรวจรอบนี้ (${(r.scope||[]).length}/${cand.length})</h3><p class="hint">ใบรอบ CLOSE จะมีเฉพาะจุดที่เลือก ทั้งในแบบ รูป และตารางใบ DEFECT</p><div class="row" style="gap:14px">${cand.map(d=>`<label class="chk"><input type="checkbox" data-scope="${d.id}" ${(r.scope||[]).includes(d.id)?'checked':''}> <span class="mono">${esc(d.code)}</span> <span class="small muted">${esc(d.area||'')}</span></label>`).join('')||'<span class="muted">ไม่มี DEFECT ค้างแก้</span>'}</div></div>`}
-  h+=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT ใหม่ที่พบรอบนี้':'เพิ่ม DEFECT'}</button><span class="hint" style="margin:0">จัดหมวดตามห้อง/พื้นที่ · กระเบื้องหลายแผ่นในห้องเดียวกันให้ติ๊ก “DEFECT แบบโซน” ในหน้าแก้ไข รวมเป็นรายการเดียว · บันทึกผลตรวจของแต่ละจุดด้านล่าง</span></div>`;
+  h+=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT ใหม่ที่พบรอบนี้':'เพิ่ม DEFECT'}</button><select data-defgroup="1" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(r.defGroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><span class="hint" style="margin:0">เรียงตามชื่อ DEFECT ในแต่ละกลุ่ม · กระเบื้องหลายแผ่นในห้องเดียวกันให้ติ๊ก “DEFECT แบบโซน” ในหน้าแก้ไข รวมเป็นรายการเดียว · บันทึกผลตรวจของแต่ละจุดด้านล่าง</span></div>`;
   if(!vis.length)return h+`<div class="empty">ยังไม่มี DEFECT ในใบนี้</div>`;
-  for(const gp of groupRooms(vis)){
+  for(const gp of groupRooms(vis,r.defGroup||'room')){
    const tiles=gp.list.reduce((n,x)=>n+zoneCount(x),0);
    h+=`<div class="rmhead"><b>${esc(gp.room)}</b><span class="chip">${gp.list.length} รายการ</span>${tiles?`<span class="chip warn">โซนรวม ${tiles} แผ่น</span>`:''}</div>`;
   for(const d of gp.list){
@@ -406,13 +412,15 @@ function tabDefects(r){
 /* --- preview tab --- */
 function tabPreview(r){
   const warn=[];
-  if(r.photos.length<4)warn.push(`รูปตรวจยังไม่ครบ 4 รูป (มี ${r.photos.length})`);
+  if(photoTotal(r)<4)warn.push(`รูปยังไม่ครบ 4 รูป (มี ${photoTotal(r)})`);
+  if(r.type==='CLOSE'&&!r.photos.length)warn.push('ยังไม่มีรูปตอนตรวจปิด');
+  if(r.type==='CLOSE'&&!openPhotosFor(r).length)warn.push('ไม่มีรูปตอนตรวจเปิดแนบมา (ใบ OPEN ไม่มีรูป หรือยกเว้นไว้ทั้งหมด)');
   if(!r.plans.length)warn.push('ยังไม่ได้แนบแบบที่ระบุสี/ขอบเขต');
   else if(!r.plans.some(p=>(p.shapes||[]).some(s=>s.t==='poly'&&!s.ref)))warn.push('ยังไม่ได้วาดโซนสีขอบเขตบนแบบ');
   const vis=visibleDefects(r);const nop=vis.filter(d=>!d.loc).length;if(nop&&defectsOn(r))warn.push(`DEFECT ${nop} จุดยังไม่ปักหมุดบนแบบ`);
   if(r.type==='CLOSE'&&!vis.length)warn.push('ใบส่งปิดต้องมีรายการ DEFECT — ยังไม่มีเลย');
   if(r.type==='CLOSE'&&vis.length&&!(r.scope||[]).length)warn.push('ยังไม่ได้เลือก DEFECT ที่ส่งตรวจรอบนี้');
-  if(r.type==='CLOSE'&&!r.photos.some(p=>p.stage==='after'))warn.push('ไม่มีรูป “หลังแก้” ของจุดที่แก้');
+  if(r.type==='CLOSE'){const nph=vis.filter(d=>{const x=defectPhotos(r,d);return !x.before&&!x.after}).length;if(nph)warn.push(`DEFECT ${nph} จุดยังไม่มีรูปประกอบ`)}
   return`${warn.length?`<div class="banner"><b>ตรวจก่อนส่ง:</b><ul style="margin:4px 0 0;padding-left:20px">${warn.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:`<div class="banner info">เอกสารครบตามเกณฑ์ พร้อมส่งตรวจ</div>`}
    <div class="row" style="margin-bottom:12px"><button class="btn pri" data-act="pdf">ดาวน์โหลด PDF (ส่งตรวจ)</button><button class="btn" data-act="html">ดาวน์โหลดไฟล์ HTML (พิมพ์ด้วยเบราว์เซอร์)</button><span class="hint" style="margin:0" id="pvinfo"></span></div>
    <div class="pv" id="pv"></div>`;
