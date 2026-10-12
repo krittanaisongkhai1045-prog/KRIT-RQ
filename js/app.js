@@ -2,7 +2,7 @@
 function pinDefectFlow(r,d){
   if(!r.plans.length){toast('เพิ่มแบบในใบตรวจก่อน แล้วค่อยปักหมุด');UI.tab='plans';render();return}
   if(r.plans.length===1)return openPlan(r,r.plans[0],d);
-  const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุด ${esc(pinLabel(d))} บนแบบไหน</h3>${r.plans.map(p=>`<button class="pickrow" data-p="${p.id}">${esc(p.name)}</button>`).join('')}</div>`,'modal');
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุด ${esc(pinLabel(d))} บนแบบไหน</h3>${plansSorted(r).map(p=>`<button class="pickrow" data-p="${p.id}">${esc(p.name)}</button>`).join('')}</div>`,'modal');
   o.addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!b&&e.target!==o)return;o.remove();if(b)openPlan(r,r.plans.find(p=>p.id===b.dataset.p),d)});
 }
 function autoResult(r){

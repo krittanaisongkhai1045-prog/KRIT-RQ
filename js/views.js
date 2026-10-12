@@ -86,7 +86,7 @@ function makeClose(rid,num0,kind){
   const open=chainDefects(rid).filter(d=>defectStatus(d)!=='closed');
   const round=reqs.filter(x=>x.type==='CLOSE').length+1;const num=num0!=null?num0:p.nextNo++;const id='rq'+uid();
   const items=new Set(open.map(d=>d.item).filter(Boolean));
-  const cl=clone(prev.checklist||{});for(const k of Object.keys(cl))cl[k].sel=items.has(k);
+  const cl=clone(prev.checklist||{});if(open.length)for(const k of Object.keys(cl))cl[k].sel=items.has(k);
   items.forEach(k=>{cl[k]=cl[k]||{};cl[k].sel=true});
   const r={id,rootId:rid,parentId:prev.id,type:'CLOSE',round,num,no:p.prefix+num,date:todayISO(),planDate:todayISO(),planTime:'',bookNo:'',
     workText:base.workText,workType:base.workType,location:base.location,building:base.building,floor:base.floor,level:base.level,strength:'',slump:'',refDwg:base.refDwg,
@@ -100,14 +100,16 @@ function makeClose(rid,num0,kind){
 function viewDefects(){
   const f=UI.dfilter;const q=(UI.dq||'').toLowerCase();
   let ds=S.defects.filter(d=>!d.qc).map(d=>({d,st:defectStatus(d)})).filter(x=>(f==='all'||(f==='open'?x.st!=='closed':f==='need'?x.st==='open':x.st===f))&&(!q||[x.d.code,x.d.area,x.d.type,x.d.desc].join(' ').toLowerCase().includes(q)));
-  ds.sort((a,b)=>String(a.d.code).localeCompare(String(b.d.code),undefined,{numeric:true}));
+  ds.sort((a,b)=>(roomOf(a.d)===NOROOM)-(roomOf(b.d)===NOROOM)||natCmp(roomOf(a.d),roomOf(b.d))||natCmp(a.d.code,b.d.code));
   let h=`<div class="row" style="margin-bottom:12px"><h1 style="font-size:22px;margin-right:auto">DEFECT ตามใบตรวจ</h1>
    <select id="dfilter" style="width:auto">${[['open','ค้างแก้ / รอผล'],['need','ต้องแก้ไข'],['submitted','รอผลตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
    <input type="search" id="dq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.dq||'')}" style="width:220px"></div>`;
   if(!ds.length)return h+`<div class="empty">ไม่มี DEFECT ในมุมมองนี้</div>`;
-  h+=`<div class="tw"><table class="t"><thead><tr><th>รหัส</th><th>สถานะ</th><th>ตำแหน่ง</th><th>ประเภท</th><th>ตำแหน่งกระเบื้อง</th><th>วิธีแก้เฉพาะจุด</th><th>พบใน</th></tr></thead><tbody>`;
+  h+=`<div class="tw"><table class="t"><thead><tr><th>รหัส</th><th>สถานะ</th><th>ห้อง / ตำแหน่ง</th><th>ประเภท</th><th>ตำแหน่งกระเบื้อง</th><th>วิธีแก้เฉพาะจุด</th><th>พบใน</th></tr></thead><tbody>`;
+  let lastRoom=null;
   for(const x of ds){const d=x.d;const fr=reqById(d.foundIn);
-    h+=`<tr style="cursor:pointer" data-act="editdef" data-id="${d.id}"><td class="mono"><b>${esc(d.code)}</b></td><td>${chip(STATUS_TXT[x.st],STATUS_CLS[x.st])}</td><td>${esc(d.area)} ${esc(d.surface||'')} ${esc(d.face||'')}</td><td>${esc(d.type)}</td><td class="small">${esc(gridText(d.grid))||'<span class="muted">—</span>'}</td><td class="small">${esc(d.fix)}</td><td class="small mono">${fr?esc(fr.no):''}</td></tr>`}
+    if(roomOf(d)!==lastRoom){lastRoom=roomOf(d);const same=ds.filter(y=>roomOf(y.d)===lastRoom);const tiles=same.reduce((n,y)=>n+zoneCount(y.d),0);h+=`<tr class="rmtr"><td colspan="7"><b>${esc(lastRoom)}</b> <span class="small muted">${same.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</span></td></tr>`}
+    h+=`<tr style="cursor:pointer" data-act="editdef" data-id="${d.id}"><td class="mono"><b>${esc(d.code)}</b>${d.zone?' <span class="chip warn">โซน</span>':''}</td><td>${chip(STATUS_TXT[x.st],STATUS_CLS[x.st])}</td><td>${esc(d.area)} ${esc(d.surface||'')} ${esc(d.face||'')}</td><td>${esc(d.type)}${d.zone?` · ${zoneCount(d)} แผ่น`:''}</td><td class="small">${esc(gridText(d.grid))||'<span class="muted">—</span>'}</td><td class="small">${esc(d.fix)}</td><td class="small mono">${fr?esc(fr.no):''}</td></tr>`}
   return h+`</tbody></table></div>`;
 }
 
@@ -121,11 +123,14 @@ function editDefect(d,ctx){
    <div class="grid g2">
      <label class="f">รหัส DEFECT<input type="text" data-b="code" value="${esc(d.code)}"></label>
      <label class="f" ${ctx.qc?'hidden':''}>หัวข้อใน Checklist<select data-b="item"><option value="">— ไม่ระบุ —</option>${items.map(i=>`<option value="${i.id}" ${i.id===d.item?'selected':''}>${esc(i.t)}</option>`).join('')}</select></label>
-     <label class="f">ห้อง / พื้นที่ (เช่น ห้อง 101 ห้องน้ำ)<input type="text" data-b="area" value="${esc(d.area)}"></label>
+     <label class="f">ห้อง / พื้นที่ (ใช้จัดหมวดรายการ DEFECT)<input type="text" data-b="area" list="roomlist" placeholder="เช่น ห้อง 101 / ห้องน้ำ 102" value="${esc(d.area)}"></label><datalist id="roomlist">${[...new Set(S.defects.map(x=>(x.area||'').trim()).filter(Boolean))].sort(natCmp).map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
      <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">พื้นผิว<select data-b="surface"><option value="">—</option>${opt(SURFACES,d.surface)}</select></label><label class="f">ด้าน / แนว (A,B,C,D)<input type="text" data-b="face" value="${esc(d.face||'')}"></label></div>
      <label class="f">ประเภท DEFECT<select data-b="type"><option value="">—</option>${opt(P.defectTypes,d.type)}</select></label>
      <label class="f">กำหนดแก้ไขเสร็จ<input type="date" data-b="due" value="${esc(d.due||'')}"></label>
    </div>
+   <label class="chk" style="margin-top:12px"><input type="checkbox" data-bz="zone" ${d.zone?'checked':''}> <b>DEFECT แบบโซน</b> <span class="small muted">— รวมหลายแผ่นในพื้นที่เดียวกัน (เช่น กระเบื้องพื้นทั้งห้อง 50 แผ่น) เป็นรายการเดียว</span></label>
+   <div id="zbox" class="grid g2" style="margin-top:8px" ${d.zone?'':'hidden'}><label class="f">จำนวนแผ่นที่ต้องแก้ (เว้นว่าง = นับจากช่องที่เลือกในผัง)<input type="number" min="0" data-b="count" value="${esc(d.count||'')}"></label>
+     <label class="f">ขอบเขตโซน<input type="text" data-b="zoneNote" placeholder="เช่น พื้นทั้งห้อง ยกเว้นแถวชิดผนัง A" value="${esc(d.zoneNote||'')}"></label></div>
    <label class="f" style="margin-top:12px">รายละเอียด<textarea data-b="desc" rows="2">${esc(d.desc)}</textarea></label>
    <h3 style="margin:16px 0 4px;font-size:15px">ตำแหน่งกระเบื้องที่ต้องแก้ (ลดความเสียหายแผ่นข้างเคียง)</h3>
    <p class="hint">ใส่ขนาดพื้นผิวและกระเบื้อง แล้วแตะช่องที่เป็นจุดแก้ไข ผังนี้จะพิมพ์ในใบ DEFECT ให้ช่างเห็นว่าแตะเฉพาะแผ่นไหน</p>
@@ -136,6 +141,8 @@ function editDefect(d,ctx){
      <label class="f">กระเบื้อง สูง/ยาว (ซม.)<input type="number" data-g="th" min="1" value="${d.grid?.th||''}"></label>
    </div>
    <div class="row" style="margin:10px 0"><button class="btn" data-x="mkgrid">สร้างผังกระเบื้อง</button><label class="f grow">จุดเริ่มนับ (คอลัมน์ 1 / แถว 1)<input type="text" data-g="origin" placeholder="เช่น มุมซ้ายล่างเมื่อยืนหน้าผนัง B / มุมประตูเข้าห้อง" value="${esc(d.grid?.origin||'')}"></label></div>
+   <div id="gtools" class="row small" style="gap:6px;margin-bottom:6px" hidden><button class="btn sm" data-x="gall">เลือกทั้งผัง</button><button class="btn sm" data-x="gnone">ล้างที่เลือก</button><button class="btn sm" data-x="ginv">กลับค่า</button>
+     <span class="muted">เลือกช่วง:</span>แถว<input type="number" min="1" id="gr0" style="width:54px">–<input type="number" min="1" id="gr1" style="width:54px"> คอลัมน์<input type="number" min="1" id="gc0" style="width:54px">–<input type="number" min="1" id="gc1" style="width:54px"><button class="btn sm" data-x="grange">เพิ่มช่วงนี้</button><span class="muted">· ลากนิ้ว/เมาส์บนผังเพื่อระบายหลายช่อง</span></div>
    <div id="gbox"></div>
    <div class="grid g2" style="margin-top:14px">
      <label class="f">วิธีแก้เฉพาะจุด<select data-b="fix"><option value="">—</option>${opt(P.fixMethods,d.fix)}</select></label>
@@ -150,17 +157,30 @@ function editDefect(d,ctx){
   if(RO){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del]',o).forEach(x=>x.remove())}
   const gbox=$('#gbox',o);
   function drawGrid(){const g=d.grid;if(!g||!g.cols){const pp=planOfDefect(d);gbox.innerHTML=pp?`<div style="height:170px;max-width:340px;border:1px solid var(--line);border-radius:6px;overflow:hidden">${locCropSvg(d,pp)}</div><p class="small muted" style="margin:6px 0 0">ยังไม่ได้สร้างผังกระเบื้อง · แสดงตำแหน่ง DEFECT บนแบบ “${esc(pp.name||'')}” แทน (ใบ DEFECT จะพิมพ์ภาพนี้)</p>`:'<div class="empty small">ยังไม่ได้สร้างผังกระเบื้อง (ข้ามได้ถ้าไม่จำเป็น)</div>';return}
+    $('#gtools',o).hidden=RO;
     gbox.innerHTML=`<div class="gsvg-wrap">${gridSvg(g).replace('<svg','<svg class="gsvg" id="gsvg"')}</div><p class="small muted" style="margin:6px 0 0">${g.cols} คอลัมน์ × ${g.rows} แถว · เลือกอยู่ ${g.cells.length} แผ่น ${g.cells.length?'· '+esc(gridText(g)):''}</p>`}
   drawGrid();
+  /* ระบายหลายช่องด้วยการลาก */
+  let paint=null;
+  const cellAt=(sv,e)=>{const g=d.grid;const r=sv.getBoundingClientRect(),vb=sv.viewBox.baseVal;const x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;const c=Math.floor(x/20)+1,row=g.rows-Math.floor(y/20);return(c<1||c>g.cols||row<1||row>g.rows)?null:c+','+row};
+  const setCell=(sv,k,on)=>{const g=d.grid;const i=g.cells.indexOf(k);if(on&&i<0)g.cells.push(k);if(!on&&i>=0)g.cells.splice(i,1);const rc=sv.querySelector('[data-k="'+k+'"]');if(rc)rc.setAttribute('fill',on?'#e03131':'#fff')};
+  o.addEventListener('pointerdown',e=>{const sv=e.target.closest&&e.target.closest('#gsvg');if(!sv||RO||!d.grid||!d.grid.cols)return;const k=cellAt(sv,e);if(!k)return;
+    const on=!d.grid.cells.includes(k);paint={sv,on};try{sv.setPointerCapture(e.pointerId)}catch(x){}setCell(sv,k,on);e.preventDefault()});
+  o.addEventListener('pointermove',e=>{if(!paint)return;const k=cellAt(paint.sv,e);if(k)setCell(paint.sv,k,paint.on)});
+  const endPaint=()=>{if(paint){paint=null;save();drawGrid();if(ctx.after)ctx.after()}};o.addEventListener('pointerup',endPaint);o.addEventListener('pointercancel',endPaint);
   o.addEventListener('input',e=>{const t=e.target;
+    if(t.dataset.bz){d[t.dataset.bz]=t.checked;$('#zbox',o).hidden=!t.checked;save();if(ctx.after)ctx.after();return}
     if(t.dataset.b){d[t.dataset.b]=t.value;save();if(ctx.after)ctx.after()}
     if(t.dataset.g){d.grid=d.grid||{cells:[]};d.grid[t.dataset.g]=t.type==='number'?(+t.value||0):t.value;save()}});
   o.addEventListener('click',e=>{
-    const svgEl=e.target.closest('#gsvg');
-    if(svgEl){if(RO)return;const g=d.grid;const r=svgEl.getBoundingClientRect();const vb=svgEl.viewBox.baseVal;const x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;
-      const c=Math.floor(x/20)+1,row=g.rows-Math.floor(y/20);if(c<1||c>g.cols||row<1||row>g.rows)return;const k=c+','+row;const i=g.cells.indexOf(k);i>=0?g.cells.splice(i,1):g.cells.push(k);save();drawGrid();return}
     const b=e.target.closest('[data-x]');if(b){const x=b.dataset.x;
       if(x==='close'||e.target===o){o.remove();ctx.after&&ctx.after(true);return}
+      if(x==='gall'||x==='gnone'||x==='ginv'||x==='grange'){const g=d.grid;if(!g||!g.cols){toast('สร้างผังกระเบื้องก่อน');return}
+        const all=[];for(let c=1;c<=g.cols;c++)for(let r=1;r<=g.rows;r++)all.push(c+','+r);
+        if(x==='gall')g.cells=all;else if(x==='gnone')g.cells=[];else if(x==='ginv'){const st=new Set(g.cells);g.cells=all.filter(k=>!st.has(k))}
+        else{const v=i=>+$('#'+i,o).value||0;const r0=v('gr0')||1,r1=v('gr1')||r0,c0=v('gc0')||1,c1=v('gc1')||c0;const st=new Set(g.cells);
+          for(let c=Math.max(1,Math.min(c0,c1));c<=Math.min(g.cols,Math.max(c0,c1));c++)for(let r=Math.max(1,Math.min(r0,r1));r<=Math.min(g.rows,Math.max(r0,r1));r++)st.add(c+','+r);g.cells=[...st]}
+        save();drawGrid();return}
       if(x==='mkgrid'){const g=d.grid||(d.grid={cells:[]});if(!(g.sw&&g.sh&&g.tw&&g.th)){toast('กรอกขนาดพื้นผิวและกระเบื้องให้ครบ');return}
         const cols=Math.ceil(g.sw/g.tw-.001),rows=Math.ceil(g.sh/g.th-.001);if(cols>60||rows>60){toast('ผังใหญ่เกินไป (สูงสุด 60×60 แผ่น) ลองแบ่งเป็นผนังคนละด้าน');return}
         g.cols=cols;g.rows=rows;g.cells=(g.cells||[]).filter(k=>{const[c,r]=k.split(',').map(Number);return c<=cols&&r<=rows});save();drawGrid();return}
@@ -181,9 +201,10 @@ const REQ_ST=[['draft','ร่าง'],['sent','ส่งตรวจแล้�
 const reqStatus=r=>r.cancelled?'cancelled':r.result==='approved'?'approved':r.result==='disapproved'?'disapproved':r.sent?'sent':'draft';
 function setReqStatus(r,v){r.cancelled=v==='cancelled';r.sent=v==='sent'||v==='approved'||v==='disapproved';r.result=v==='approved'?'approved':v==='disapproved'?'disapproved':''}
 function viewReq(){
-  const r=curReq();const cs=chainState(rootId(r));const tabs=[['info','ข้อมูลเอกสาร'],['plans','แบบ / ขอบเขต',r.plans.length],['photos','รูปตรวจ',r.photos.length,r.photos.length>=4?'good':'bad'],['defects','DEFECT',visibleDefects(r).length],['preview','เอกสารพร้อมส่ง']];
+  const r=curReq();const cs=chainState(rootId(r));const tabs=[['info','ข้อมูลเอกสาร'],['plans','แบบ / ขอบเขต',r.plans.length],['photos','รูปตรวจ',r.photos.length,r.photos.length>=4?'good':'bad'],...(defectsOn(r)?[['defects','รายการ DEFECT',visibleDefects(r).length,r.type==='CLOSE'&&!visibleDefects(r).length?'bad':'']]:[]),['preview','เอกสารพร้อมส่ง']];
+  if(UI.tab==='defects'&&!defectsOn(r))UI.tab='info';
   return`<div class="row" style="margin-bottom:10px"><button class="btn sm" data-go="list">← รายการ</button><h1 style="font-size:20px" class="mono">${esc(r.no)}</h1>${chip(r.type==='OPEN'?kindLabel(r):kindLabel(r)+' รอบ '+r.round,r.type==='OPEN'?'open':'close')}${chip(cs.t,cs.k)}
-   <span style="margin-left:auto" class="row"><label class="row small muted" style="gap:6px">สถานะเอกสาร<select data-reqstatus="1" style="width:auto;color:var(--fg)">${REQ_ST.map(o=>`<option value="${o[0]}" ${reqStatus(r)===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${r.type==='OPEN'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ สร้างรอบส่งซ้ำ</button>`:r.type==='CLOSE'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ รอบส่งซ้ำถัดไป</button>`:''}</span></div>
+   <span style="margin-left:auto" class="row"><label class="row small muted" style="gap:6px">สถานะเอกสาร<select data-reqstatus="1" style="width:auto;color:var(--fg)">${REQ_ST.map(o=>`<option value="${o[0]}" ${reqStatus(r)===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${r.type==='OPEN'?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ สร้างใบส่งปิด (CLOSE)</button>`:r.type==='CLOSE'&&cs.open>0?`<button class="btn pri sm" data-act="newclose" data-id="${rootId(r)}">＋ รอบส่งซ้ำถัดไป</button>`:''}</span></div>
    ${MODE.kind==='cloud'?`<div class="row small" style="margin-bottom:10px;gap:6px">${aclSummary('requests',rootId(r))}</div>`:''}
    ${r.type==='CLOSE'?`<div class="banner info">รอบ ${esc(kindLabel(r))} ที่ ${r.round} · ตรวจซ้ำเฉพาะ ${(r.scope||[]).length} จุดที่แก้ไข (อ้างอิงใบ ${esc(kindLabel(reqById(rootId(r))))} ${esc(reqById(rootId(r)).no)}) · แบบจะแสดงเฉพาะหมุด DEFECT ของจุดที่แก้</div>`:''}
    <div class="tabs" role="tablist">${tabs.map(t=>`<button role="tab" data-tab="${t[0]}" aria-selected="${UI.tab===t[0]}">${t[1]}${t[2]!=null?`<span class="n ${t[3]||''}">${t[2]}${t[0]==='photos'?'/4':''}</span>`:''}</button>`).join('')}</div>
@@ -244,15 +265,15 @@ function openCover(r){
   openBoard({kind:'plan',ro:MODE.ro,title:`แบบใบปะหน้า · ${r.no}`,imgUrl:imgSrc(c.imgId),w:c.w,h:c.h,shapes:c.shapes,noPin:true,scale:()=>c.sym||1,onScale:v=>{c.sym=v;save()},onFlip:async ax=>{const id=await flippedImageId(c.imgId,ax);c.imgId=id;mirrorShapes(c.shapes,c.w,c.h,ax);save();return imgSrc(id)},onChange:save,onClose:()=>refreshTab()});
 }
 function tabPlans(r){
-  let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ และปักหมุดตำแหน่ง DEFECT</span></div>`;
+  let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เรียงตามชื่อแบบอัตโนมัติ (E101, E102, …) · เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ${defectsOn(r)?' และปักหมุดตำแหน่ง DEFECT':''}</span></div>`;
   if(!r.plans.length)return h+`<div class="empty">ยังไม่มีแบบในใบนี้<br>อัปโหลดแบบผัง (รูปหรือ PDF) หรือวางรูป (Ctrl+V) ที่แคปมาจากแบบ แล้ววาดโซนสีบนแบบได้เลย</div>`;
   h+=`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">`;
-  for(const pl of r.plans){
+  for(const pl of plansSorted(r)){
     const legend=[...new Map((pl.shapes||[]).filter(s=>s.t==='poly'&&s.label).map(s=>[s.c+s.label,s])).values()];
     h+=`<div class="card"><div class="thumb" data-act="openplan" data-id="${pl.id}">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,planPins(r,pl),{scale:pl.sym})}</div><div class="body">
      <input type="text" data-plan="${pl.id}" data-k="name" value="${esc(pl.name)}" aria-label="ชื่อแบบ">
      <div class="small muted">${legend.length?legend.map(s=>`<span class="dot" style="background:${s.c}"></span> ${esc(s.label)}`).join(' &nbsp; '):'ยังไม่มีโซนสี'}</div>
-     <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">ทำสี / ปักหมุด</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`}
+     <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">${defectsOn(r)?'ทำสี / ปักหมุด':'ทำสี / ระบุขอบเขต'}</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`}
   return h+`</div>`;
 }
 /* นำเข้าไฟล์แบบ: 1 ไฟล์ = 1 fileId (PDF หลายหน้า = หลายรายการที่ fileId เดียวกัน)
@@ -271,17 +292,47 @@ async function importPlanFiles(files,opts){
   return libs;
 }
 function attachPlan(r,lib){const key='pk'+uid();r.plans.push({id:'pl'+uid(),key,libId:lib.id,name:lib.name,imgId:lib.imgId,w:lib.w,h:lib.h,shapes:[]});save()}
+/* เลือกแบบจากคลัง: ขั้นที่ 1 เลือกไฟล์ (จัดหมวดตามไฟล์ที่นำเข้า) → ขั้นที่ 2 เลือกหน้าที่จะแนบ */
 function planPicker(r,cb){
-  const o=overlay(`<div class="box wide"><div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">เพิ่มแบบเข้าใบตรวจ</h3><button class="btn" data-x="close">ปิด</button></div>
-   <div class="row" style="margin-bottom:12px"><label class="btn pri" for="planfile">อัปโหลดแบบใหม่ (รูป / PDF)</label><input id="planfile" type="file" accept="image/*,application/pdf" multiple hidden><span class="hint" style="margin:0">แบบที่อัปโหลดจะเก็บไว้ในคลัง ใช้ซ้ำได้ทุกใบตรวจ</span></div>
-   <div id="libgrid" class="cards"></div></div>`,'modal');
-  const draw=()=>{$('#libgrid',o).innerHTML=sitePages().length?sitePages().map(l=>`<button class="pickrow" style="flex-direction:column;align-items:stretch" data-lib="${l.id}"><div style="aspect-ratio:4/3;background:var(--surface2);border-radius:6px;overflow:hidden">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><b class="small">${esc(l.name)}</b></button>`).join(''):'<div class="empty">คลังแบบว่าง — อัปโหลดแบบแรกได้เลย</div>'};draw();
-  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x]')){o.remove();return}
-    const b=e.target.closest('[data-lib]');if(b){const l=S.library.find(x=>x.id===b.dataset.lib);if(cb)cb(l);else{attachPlan(r,l);toast('เพิ่มแบบแล้ว')}o.remove();refreshTab()}});
-  o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files]);if(libs.length){if(cb)cb(libs[0]);else{libs.forEach(l=>attachPlan(r,l));toast('เพิ่มแบบ '+libs.length+' แผ่นแล้ว')}o.remove();refreshTab();save()}}});
+  const o=overlay(`<div class="box wide"><div class="row" style="margin-bottom:10px"><button class="btn" id="ppback" data-x="back" hidden>‹ ไฟล์</button><h3 style="margin-right:auto" id="ppt"></h3><button class="btn" data-x="close">ปิด</button></div><div id="ppb"></div></div>`,'modal');
+  const attached=new Set(((r&&r.plans)||[]).map(p=>p.libId).filter(Boolean));const sel=new Set();let q='';
+  const files=()=>siteGroups().filter(g=>g.pages.length);
+  const listHTML=()=>{const lq=q.toLowerCase();const gs=files().filter(g=>!lq||(g.name+' '+g.group+' '+g.rev).toLowerCase().includes(lq));
+    if(!gs.length)return`<div class="empty">${files().length?'ไม่พบไฟล์ที่ค้นหา':'คลังแบบว่าง — อัปโหลดไฟล์แรกได้เลย'}</div>`;
+    const hasG=gs.some(g=>g.group);let last=null,h='';
+    for(const g of gs){if(hasG&&g.group!==last){h+=`<div class="ghead l1" style="margin-top:8px"><b>${esc(g.group||'ไม่ระบุกลุ่ม')}</b></div>`;last=g.group}
+      const used=g.pages.filter(p=>attached.has(p.id)).length;
+      h+=`<button class="pickrow" data-f="${g.fid}"><span style="flex:none;width:84px;height:60px;background:var(--surface2);border-radius:5px;overflow:hidden;display:block">${siteThumb(g.pages[0])}</span><span style="flex:1;min-width:0"><b>${esc(g.name)}</b><span class="small muted" style="display:block">${esc([g.rev,g.date&&fmtDate(g.date)].filter(Boolean).join(' · '))}</span></span><span class="chip">${g.pages.length>1?g.pages.length+' หน้า':'1 หน้า'}</span>${used?`<span class="chip good">แนบแล้ว ${used}</span>`:''}</button>`}
+    return h};
+  function showFiles(){
+    $('#ppback',o).hidden=true;$('#ppt',o).textContent='เพิ่มแบบเข้าใบตรวจ · เลือกไฟล์';
+    $('#ppb',o).innerHTML=`<div class="row" style="margin-bottom:10px"><label class="btn pri" for="planfile">อัปโหลดไฟล์ใหม่ (รูป / PDF)</label><input id="planfile" type="file" accept="image/*,application/pdf" multiple hidden><input type="search" id="ppq" placeholder="ค้นหาชื่อไฟล์ / กลุ่ม" value="${esc(q)}" style="flex:1;min-width:140px"></div><p class="hint" style="margin:0 0 8px">แบบที่เคยอัปโหลดหน้างานอยู่ที่นี่ จัดตามไฟล์ — เลือกไฟล์แล้วค่อยเลือกว่าจะแนบหน้าไหน</p><div id="pplist">${listHTML()}</div>`}
+  function showPages(fid){
+    const g=siteGroups().find(x=>x.fid===fid);if(!g||!g.pages.length){showFiles();return}
+    sel.clear();$('#ppback',o).hidden=false;$('#ppt',o).textContent=g.name+(g.rev?' · '+g.rev:'');
+    $('#ppb',o).innerHTML=`<p class="hint" style="margin:0 0 8px">${cb?'แตะหน้าที่ต้องการใช้':'แตะเลือกหน้าที่จะแนบ (เลือกได้หลายหน้า) แล้วกด “แนบที่เลือก”'}</p>
+      <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">${g.pages.map(l=>`<button class="pickrow pgsel" style="flex-direction:column;align-items:stretch;position:relative" data-pg="${l.id}"><span style="aspect-ratio:4/3;background:var(--surface2);border-radius:6px;overflow:hidden;display:block">${siteThumb(l)}</span><b class="small">${g.pages.length>1?'หน้า '+(l.page||1):esc(l.name)}</b>${attached.has(l.id)?'<span class="chip good" style="position:absolute;right:6px;top:6px">แนบแล้ว</span>':''}<span class="pgck" style="position:absolute;left:8px;top:8px"></span></button>`).join('')}</div>
+      ${cb?'':`<div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn" data-x="all">เลือกทั้งหมด</button><button class="btn pri" id="ppgo" data-x="go" disabled>แนบที่เลือก (0)</button></div>`}`}
+  const upd=()=>{$$('.pgsel',o).forEach(b=>{const on=sel.has(b.dataset.pg);b.classList.toggle('on',on);b.querySelector('.pgck').textContent=on?'☑':'☐'});const go=$('#ppgo',o);if(go){go.disabled=!sel.size;go.textContent=`แนบที่เลือก (${sel.size})`}};
+  showFiles();
+  o.addEventListener('input',e=>{if(e.target.id==='ppq'){q=e.target.value;$('#pplist',o).innerHTML=listHTML()}});
+  o.addEventListener('click',e=>{
+    if(e.target===o){o.remove();return}
+    const x=e.target.closest('[data-x]');
+    if(x){const k=x.dataset.x;
+      if(k==='close'){o.remove();return}
+      if(k==='back'){showFiles();return}
+      if(k==='all'){const all=$$('.pgsel',o).map(b=>b.dataset.pg);const full=all.every(i=>sel.has(i));all.forEach(i=>full?sel.delete(i):sel.add(i));upd();return}
+      if(k==='go'){const ls=[...sel].map(id=>S.library.find(l=>l.id===id)).filter(Boolean).sort((a,b)=>(a.page||1)-(b.page||1));ls.forEach(l=>attachPlan(r,l));o.remove();toast(`แนบแบบ ${ls.length} หน้าแล้ว (เรียงตามชื่อ)`);refreshTab();return}}
+    const f=e.target.closest('[data-f]');if(f){showPages(f.dataset.f);return}
+    const p=e.target.closest('[data-pg]');if(p){const id=p.dataset.pg;
+      if(cb){const l=S.library.find(z=>z.id===id);o.remove();if(l)cb(l);refreshTab();return}
+      sel.has(id)?sel.delete(id):sel.add(id);upd()}});
+  o.addEventListener('change',async e=>{if(e.target.id==='planfile'){const libs=await importPlanFiles([...e.target.files],{maxPages:40});
+    if(libs.length){libs.forEach(l=>{l.date=l.date||todayISO();l.shapes=l.shapes||[]});save();const fids=[...new Set(libs.map(l=>l.fileId))];toast('อัปโหลดแล้ว — เลือกหน้าที่จะแนบ');fids.length===1?showPages(fids[0]):showFiles()}}});
 }
 function openPlan(r,pl,pinFor){
-  const board=openBoard({kind:'plan',ro:MODE.ro,title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,scale:()=>pl.sym||1,onScale:v=>{pl.sym=v;save()},
+  const board=openBoard({kind:'plan',ro:MODE.ro,noPin:!defectsOn(r),title:`${pl.name} · ${r.no}`,imgUrl:imgSrc(pl.imgId),w:pl.w,h:pl.h,shapes:pl.shapes,pinFor,scale:()=>pl.sym||1,onScale:v=>{pl.sym=v;save()},
     onFlip:async ax=>{const id=await flippedImageId(pl.imgId,ax);
       chainReqs(rootId(r)).forEach(q=>(q.plans||[]).forEach(p=>{if(p.key===pl.key){p.imgId=id;mirrorShapes(p.shapes,p.w,p.h,ax)}}));
       S.defects.forEach(d=>{if(d.loc&&d.loc.planKey===pl.key){if(ax==='x')d.loc.x=pl.w-d.loc.x;else d.loc.y=pl.h-d.loc.y}});
@@ -333,19 +384,22 @@ function tabDefects(r){
   if(isC){
     const cand=chainDefects(rid).filter(d=>{const st=defectStatus(d);return st!=='closed'||(r.scope||[]).includes(d.id)});
     h+=`<div class="panel"><h3>เลือกจุดที่ส่งตรวจรอบนี้ (${(r.scope||[]).length}/${cand.length})</h3><p class="hint">ใบรอบ CLOSE จะมีเฉพาะจุดที่เลือก ทั้งในแบบ รูป และตารางใบ DEFECT</p><div class="row" style="gap:14px">${cand.map(d=>`<label class="chk"><input type="checkbox" data-scope="${d.id}" ${(r.scope||[]).includes(d.id)?'checked':''}> <span class="mono">${esc(d.code)}</span> <span class="small muted">${esc(d.area||'')}</span></label>`).join('')||'<span class="muted">ไม่มี DEFECT ค้างแก้</span>'}</div></div>`}
-  h+=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT ใหม่ที่พบรอบนี้':'เพิ่ม DEFECT'}</button><span class="hint" style="margin:0">${isC?'บันทึกผลตรวจซ้ำของแต่ละจุดด้านล่าง':'ระบุเลขที่ DEFECT พร้อมตำแหน่งกระเบื้อง ใช้เป็นขอบเขตส่งรอบ CLOSE'}</span></div>`;
+  h+=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT ใหม่ที่พบรอบนี้':'เพิ่ม DEFECT'}</button><span class="hint" style="margin:0">จัดหมวดตามห้อง/พื้นที่ · กระเบื้องหลายแผ่นในห้องเดียวกันให้ติ๊ก “DEFECT แบบโซน” ในหน้าแก้ไข รวมเป็นรายการเดียว · บันทึกผลตรวจของแต่ละจุดด้านล่าง</span></div>`;
   if(!vis.length)return h+`<div class="empty">ยังไม่มี DEFECT ในใบนี้</div>`;
-  for(const d of vis){
+  for(const gp of groupRooms(vis)){
+   const tiles=gp.list.reduce((n,x)=>n+zoneCount(x),0);
+   h+=`<div class="rmhead"><b>${esc(gp.room)}</b><span class="chip">${gp.list.length} รายการ</span>${tiles?`<span class="chip warn">โซนรวม ${tiles} แผ่น</span>`:''}</div>`;
+  for(const d of gp.list){
     const st=defectStatus(d);const res=(r.res&&r.res[d.id])||{};
-    h+=`<div class="dcard"><div><div class="code">${esc(d.code)}</div>${chip(STATUS_TXT[st],STATUS_CLS[st])}</div>
+    h+=`<div class="dcard"><div><div class="code">${esc(d.code)}</div>${chip(STATUS_TXT[st],STATUS_CLS[st])}${d.zone?`<div><span class="chip warn">โซน ${zoneCount(d)} แผ่น</span></div>`:''}</div>
       <div style="min-width:0"><div><b>${esc(d.area||'ยังไม่ระบุพื้นที่')}</b> <span class="muted">${esc(d.surface||'')} ${esc(d.face||'')}</span></div>
        <div>${esc(d.type||'ยังไม่ระบุประเภท')}${d.desc?` — ${esc(d.desc)}`:''}</div>
-       <div class="small muted">${d.grid&&d.grid.cells&&d.grid.cells.length?esc(gridText(d.grid)):'ไม่มีผังกระเบื้อง'}</div>
+       ${d.zone&&d.zoneNote?`<div class="small">ขอบเขตโซน: ${esc(d.zoneNote)}</div>`:''}<div class="small muted">${d.grid&&d.grid.cells&&d.grid.cells.length?esc(gridText(d.grid)):'ไม่มีผังกระเบื้อง'}</div>
        ${d.fix?`<div class="small">วิธีแก้: ${esc(d.fix)}</div>`:''}
        <div class="row" style="margin-top:6px">${d.loc?'<span class="chip good">มีหมุดบนแบบ</span>':`<button class="btn sm" data-act="pindef" data-id="${d.id}">ปักหมุดบนแบบ</button>`}<button class="btn sm" data-act="editdef" data-id="${d.id}">แก้ไข</button></div>
        ${isC&&(r.scope||[]).includes(d.id)?`<div class="row" style="margin-top:8px"><span class="small muted">ผลตรวจรอบนี้:</span>${[['pass','ผ่าน','good'],['fail','ไม่ผ่าน','bad'],['','ยังไม่ตรวจ','']].map(o=>`<button class="btn sm ${res.r===o[0]||(!res.r&&o[0]==='')?'pri':''}" data-act="setres" data-id="${d.id}" data-v="${o[0]}">${o[1]}</button>`).join('')}<input type="text" data-res="${d.id}" placeholder="หมายเหตุ" value="${esc(res.note||'')}" style="width:200px"></div>`:''}
       </div>
-      <div>${d.grid&&d.grid.cols?`<div class="gsv">${gridSvg(d.grid)}</div>`:''}</div></div>`}
+      <div>${d.grid&&d.grid.cols?`<div class="gsv">${gridSvg(d.grid)}</div>`:''}</div></div>`}}
   return h;
 }
 
@@ -355,8 +409,9 @@ function tabPreview(r){
   if(r.photos.length<4)warn.push(`รูปตรวจยังไม่ครบ 4 รูป (มี ${r.photos.length})`);
   if(!r.plans.length)warn.push('ยังไม่ได้แนบแบบที่ระบุสี/ขอบเขต');
   else if(!r.plans.some(p=>(p.shapes||[]).some(s=>s.t==='poly'&&!s.ref)))warn.push('ยังไม่ได้วาดโซนสีขอบเขตบนแบบ');
-  const vis=visibleDefects(r);const nop=vis.filter(d=>!d.loc).length;if(nop)warn.push(`DEFECT ${nop} จุดยังไม่ปักหมุดบนแบบ`);
-  if(r.type==='CLOSE'&&!(r.scope||[]).length)warn.push('ยังไม่ได้เลือก DEFECT ที่ส่งตรวจรอบนี้');
+  const vis=visibleDefects(r);const nop=vis.filter(d=>!d.loc).length;if(nop&&defectsOn(r))warn.push(`DEFECT ${nop} จุดยังไม่ปักหมุดบนแบบ`);
+  if(r.type==='CLOSE'&&!vis.length)warn.push('ใบส่งปิดต้องมีรายการ DEFECT — ยังไม่มีเลย');
+  if(r.type==='CLOSE'&&vis.length&&!(r.scope||[]).length)warn.push('ยังไม่ได้เลือก DEFECT ที่ส่งตรวจรอบนี้');
   if(r.type==='CLOSE'&&!r.photos.some(p=>p.stage==='after'))warn.push('ไม่มีรูป “หลังแก้” ของจุดที่แก้');
   return`${warn.length?`<div class="banner"><b>ตรวจก่อนส่ง:</b><ul style="margin:4px 0 0;padding-left:20px">${warn.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`:`<div class="banner info">เอกสารครบตามเกณฑ์ พร้อมส่งตรวจ</div>`}
    <div class="row" style="margin-bottom:12px"><button class="btn pri" data-act="pdf">ดาวน์โหลด PDF (ส่งตรวจ)</button><button class="btn" data-act="html">ดาวน์โหลดไฟล์ HTML (พิมพ์ด้วยเบราว์เซอร์)</button><span class="hint" style="margin:0" id="pvinfo"></span></div>

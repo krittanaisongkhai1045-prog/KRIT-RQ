@@ -132,7 +132,7 @@ table.t input[type=text]{padding:3px 6px;font-size:13px}
 .binsp{background:var(--surface);border-top:1px solid var(--line);padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-height:50px}
 .binsp input[type=text]{width:240px;max-width:100%}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:8px;z-index:300;font-size:14px;max-width:90%}
-.gsvg{width:100%;max-width:420px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;touch-action:manipulation}
+.gsvg{width:100%;max-width:420px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;touch-action:none}
 .pickrow{display:flex;gap:10px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--surface);width:100%;text-align:left}
 .pickrow:hover{border-color:var(--accent)}
 
@@ -153,3 +153,7 @@ table.t input[type=text]{padding:3px 6px;font-size:13px}
 .pchip.closed{border-color:#2f9e44;color:#2b8a3e}.pchip.fixed{border-color:#f08c00;color:#d9730d}
 .pchip.add{border:2px dashed var(--accent);color:var(--accent);font-family:inherit;white-space:nowrap}
 @media(max-width:700px){.obar .tool{min-height:40px}.obar .sw{width:34px;height:34px}}
+.rmhead{display:flex;align-items:center;gap:8px;margin:16px 0 6px;padding:6px 10px;background:var(--surface2);border-left:4px solid var(--accent,#1971c2);border-radius:4px}
+.rmtr td{background:var(--surface2);padding:6px 10px}
+.pgsel.on{outline:2px solid var(--accent,#1971c2);background:var(--surface2)}
+.pgck{font-size:20px;line-height:1;color:var(--accent,#1971c2);text-shadow:0 0 3px #fff}

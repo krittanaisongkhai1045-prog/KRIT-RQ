@@ -94,13 +94,28 @@ function chainState(rid){
 function nextDefectCode(rid){const root=reqById(rid);const n=chainDefects(rid).reduce((m,d)=>Math.max(m,d.num||0),0)+1;return{num:n,code:`${root.num}-D${pad2(n)}`}}
 function gridText(g){
   if(!g||!g.cells||!g.cells.length)return'';
-  const cs=g.cells.map(k=>{const[c,r]=k.split(',');return`แถว ${r} / คอลัมน์ ${c}`});
-  return`${g.origin?g.origin+' · ':''}นับจากซ้าย-ล่าง · ${cs.slice(0,6).join(', ')}${cs.length>6?' …':''}`;
+  const pts=g.cells.map(k=>k.split(',').map(Number));const n=pts.length;const org=g.origin?g.origin+' · ':'';
+  if(n>6){const cs=pts.map(p=>p[0]),rs=pts.map(p=>p[1]);const c0=Math.min(...cs),c1=Math.max(...cs),r0=Math.min(...rs),r1=Math.max(...rs);
+    const rng=`แถว ${r0}${r1>r0?'–'+r1:''} / คอลัมน์ ${c0}${c1>c0?'–'+c1:''}`;
+    return`${org}นับจากซ้าย-ล่าง · ${n} แผ่น (${(c1-c0+1)*(r1-r0+1)===n?rng+' เต็มช่วง':'อยู่ในช่วง '+rng+' ดูผัง'})`}
+  const cs=pts.map(p=>`แถว ${p[1]} / คอลัมน์ ${p[0]}`);
+  return`${org}นับจากซ้าย-ล่าง · ${cs.join(', ')}`;
 }
+/* ---- ห้อง / DEFECT แบบโซน / เรียงชื่อตามธรรมชาติ (E101 < E102 < E1010) ---- */
+const natCmp=(a,b)=>String(a==null?'':a).localeCompare(String(b==null?'':b),'th',{numeric:true,sensitivity:'base'});
+const NOROOM='ไม่ระบุห้อง';
+const roomOf=d=>(d.area||'').trim()||NOROOM;
+const zoneCount=d=>d&&d.zone?(+d.count||(d.grid&&d.grid.cells?d.grid.cells.length:0)||0):0;
+function groupRooms(ds){
+  const m=new Map();ds.forEach(d=>{const k=roomOf(d);if(!m.has(k))m.set(k,[]);m.get(k).push(d)});
+  return[...m.entries()].sort((a,b)=>a[0]===NOROOM?1:b[0]===NOROOM?-1:natCmp(a[0],b[0])).map(([room,list])=>({room,list:list.sort((x,y)=>natCmp(x.code,y.code))}));
+}
+const defectsOn=r=>r.type==='CLOSE'||visibleDefects(r).length>0;   // ใบ OPEN ไม่มีรายการ DEFECT (ยกเว้นข้อมูลเก่าที่มีอยู่แล้ว)
+const plansSorted=r=>[...(r.plans||[])].sort((a,b)=>natCmp(a.name,b.name));
 function gridSvg(g,px){
   if(!g||!g.cols||!g.rows)return'';
   const cs=20,W=g.cols*cs,H=g.rows*cs;const set=new Set(g.cells||[]);let o='';
-  for(let r=1;r<=g.rows;r++)for(let c=1;c<=g.cols;c++){const on=set.has(c+','+r);o+=`<rect x="${(c-1)*cs}" y="${(g.rows-r)*cs}" width="${cs}" height="${cs}" fill="${on?'#e03131':'#fff'}" stroke="#8a948f" stroke-width="1"/>`}
+  for(let r=1;r<=g.rows;r++)for(let c=1;c<=g.cols;c++){const on=set.has(c+','+r);o+=`<rect data-k="${c},${r}" x="${(c-1)*cs}" y="${(g.rows-r)*cs}" width="${cs}" height="${cs}" fill="${on?'#e03131':'#fff'}" stroke="#8a948f" stroke-width="1"/>`}
   const lab=`<text x="2" y="${H+14}" font-size="11" fill="#555">ซ้าย-ล่าง (1,1)</text>`;
   return`<svg viewBox="0 0 ${W} ${H+18}" ${px?`style="width:${px}px;height:auto"`:''} xmlns="http://www.w3.org/2000/svg">${o}${lab}</svg>`;
 }

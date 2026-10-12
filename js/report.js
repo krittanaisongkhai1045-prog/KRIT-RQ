@@ -43,6 +43,7 @@ const REPORT_CSS=`
 .lg{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:11px}
 .lg .dt{display:inline-block;width:11px;height:11px;border:1px solid #333;vertical-align:-1px;margin-right:4px}
 .pl{margin-top:6px;font-size:10.5px;columns:2;column-gap:20px}
+.rmband{height:16px;line-height:16px;margin:0 0 4px;font-size:10.5px;background:#eee;border-left:3px solid #222;padding:0 6px}
 .drow{display:flex;gap:10px;border:1px solid #222;height:226px;margin-bottom:6px;padding:6px;font-size:10.5px;overflow:hidden}
 .drow .c1{width:86px;flex:none}.drow .code{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px}
 .drow .c2{width:140px;flex:none;text-align:center}.drow .c2 svg{max-width:140px;max-height:150px;width:100%;height:auto}
@@ -141,22 +142,27 @@ function locCropSvg(d,pl,z){
   return annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes||[],[{id:d.id,label:pinLabel(d),x:d.loc.x,y:d.loc.y,st:'open'}],{viewBox:[vx,vy,W,Hh],scale:pl.sym,labels:false});
 }
 function defectPagesHTML(r){
-  const vis=visibleDefects(r);if(!vis.length)return[];
-  const pages=[];
-  for(let i=0;i<vis.length;i+=4){
-    const chunk=vis.slice(i,i+4);
-    const rows=chunk.map(d=>{
+  const vis0=visibleDefects(r);if(!vis0.length||!defectsOn(r))return[];
+  const groups=groupRooms(vis0);const vis=groups.flatMap(g=>g.list);const pages=[];
+  const rowHTML=d=>{
       const ph=defectPhotos(r,d);const res=r.res&&r.res[d.id]&&r.res[d.id].r;
       const im=(p,lab)=>`<div class="pth"><div class="im">${p?annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[]):'—'}</div><div class="cp">${lab}${p&&p.caption?': '+esc(p.caption):''}</div></div>`;
-      return`<div class="drow"><div class="c1"><div class="code">${esc(pinLabel(d))}</div><div class="mono" style="font-size:9px">${esc(d.code)}</div><div style="margin-top:8px;font-size:10px"><span class="sbx">${res==='pass'?'✕':''}</span>ผ่าน<br><span class="sbx">${res==='fail'?'✕':''}</span>ไม่ผ่าน</div></div>
+      return`<div class="drow"><div class="c1"><div class="code">${esc(pinLabel(d))}</div><div class="mono" style="font-size:9px">${esc(d.code)}</div>${d.zone?`<div style="font-size:9px;font-weight:700;color:#b00">โซน ${zoneCount(d)} แผ่น</div>`:''}<div style="margin-top:8px;font-size:10px"><span class="sbx">${res==='pass'?'✕':''}</span>ผ่าน<br><span class="sbx">${res==='fail'?'✕':''}</span>ไม่ผ่าน</div></div>
        <div class="c2">${d.grid&&d.grid.cols?gridSvg(d.grid):(planOfDefect(d)?`<div style="height:112px;border:1px solid #bbb;overflow:hidden;margin-top:4px">${locCropSvg(d,planOfDefect(d))}</div><div style="font-size:8.5px;color:#444">ตำแหน่งบนแบบ · ${esc(planOfDefect(d).name||'')}</div>`:'<div style="color:#888;margin-top:50px">ไม่มีผังกระเบื้อง</div>')}${d.grid&&d.grid.cols?`<div style="font-size:9px">${d.grid.tw?`กระเบื้อง ${d.grid.tw}×${d.grid.th} ซม.`:''}</div>`:''}</div>
-       <div class="c3"><div><b>${esc(d.area||'—')}</b> · ${esc(d.surface||'')} ${esc(d.face?'ด้าน '+d.face:'')}</div><div><b>${esc(d.type||'')}</b>${d.desc?' — '+esc(d.desc):''}</div>
+       <div class="c3"><div><b>${esc(d.area||'—')}</b> · ${esc(d.surface||'')} ${esc(d.face?'ด้าน '+d.face:'')}</div><div><b>${esc(d.type||'')}</b>${d.desc?' — '+esc(d.desc):''}</div>${d.zone?`<div><b>DEFECT แบบโซน:</b> ${zoneCount(d)} แผ่น${d.zoneNote?' · '+esc(d.zoneNote):''}</div>`:''}
         ${d.grid&&d.grid.cells&&d.grid.cells.length?`<div>ตำแหน่งกระเบื้อง: ${esc(gridText(d.grid))}</div>`:''}
         ${d.fix?`<div><b>วิธีแก้เฉพาะจุด:</b> ${esc(d.fix)}</div>`:''}${d.protect?`<div style="color:#b00"><b>ห้ามกระทบ:</b> ${esc(d.protect)}</div>`:''}${d.due?`<div>กำหนดแก้เสร็จ ${fmtDate(d.due)}</div>`:''}
         ${r.res&&r.res[d.id]&&r.res[d.id].note?`<div>หมายเหตุผลตรวจ: ${esc(r.res[d.id].note)}</div>`:''}</div>
-       <div class="c4">${im(ph.before,'ก่อนแก้')}${im(ph.after,'หลังแก้')}</div></div>`}).join('');
-    pages.push(`<div class="pg">${pageHead(r,r.type==='CLOSE'?'ใบรายการ DEFECT ที่แก้ไข (ส่งตรวจซ้ำเฉพาะจุด)':'ใบรายการ DEFECT ที่พบ',`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${vis.length} จุด`)}${rows}<div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`);
-  }
+       <div class="c4">${im(ph.before,'ก่อนแก้')}${im(ph.after,'หลังแก้')}</div></div>`};
+  /* จัดหน้า: รายการเรียงตามห้อง ใส่แถบหัวห้อง ไม่ให้ล้นหน้า */
+  const ROW=232,BAND=22,CAP=956;let cur=[],h=0,last=null;const pg=[];
+  const flush=()=>{if(cur.length)pg.push(cur);cur=[];h=0;last=null};
+  for(const g of groups){const tiles=g.list.reduce((n,x)=>n+zoneCount(x),0);
+    g.list.forEach((d,i)=>{if(h+ROW+(last!==g.room?BAND:0)>CAP)flush();
+      if(last!==g.room){cur.push(`<div class="rmband">ห้อง/พื้นที่: <b>${esc(g.room)}</b>${i>0?' (ต่อ)':''} · ${g.list.length} รายการ${tiles?` · โซนรวม ${tiles} แผ่น`:''}</div>`);h+=BAND;last=g.room}
+      cur.push(rowHTML(d));h+=ROW})}
+  flush();
+  pg.forEach(rows=>pages.push(`<div class="pg">${pageHead(r,r.type==='CLOSE'?'ใบรายการ DEFECT ที่แก้ไข (ส่งตรวจซ้ำเฉพาะจุด)':'ใบรายการ DEFECT ที่พบ',`${S.project.name} · ${r.workType} · ${esc(r.location)} · ${vis.length} จุด`)}${rows.join('')}<div class="pf"><span>${esc(r.no)}</span><span>หน้า %%P%% / %%N%%</span></div></div>`));
   return pages;
 }
 /* รูป DEFECT ที่แสดงในรายการ DEFECT แล้ว ไม่ต้องซ้ำในหน้ารูปประกอบ */
@@ -172,7 +178,7 @@ function photoPagesHTML(r){
 }
 function buildReport(r){
   let pages=[{land:false,html:formHTML(r)}];
-  r.plans.forEach(pl=>pages.push(planPageHTML(r,pl)));
+  plansSorted(r).forEach(pl=>pages.push(planPageHTML(r,pl)));
   defectPagesHTML(r).forEach(h=>pages.push({land:false,html:h}));
   photoPagesHTML(r).forEach(h=>pages.push({land:false,html:h}));
   const N=pages.length;pages=pages.map((p,i)=>({land:p.land,html:p.html.replace('%%P%%',i+1).replace('%%N%%',N)}));
