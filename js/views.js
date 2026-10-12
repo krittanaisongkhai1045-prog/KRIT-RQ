@@ -27,7 +27,7 @@ function render(){
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
    <nav class="nav">${[['list','รายการส่งตรวจ'],['defects','DEFECT ตามใบตรวจ'],['qc','QC Before/After'],['site','แบบหน้างาน'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล']].map(n=>`<button data-go="${n[0]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}">${n[1]}</button>`).join('')}</nav>
-   ${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
+   ${MODE.kind==='cloud'&&MODE.uid?`<button class="btn sm ${MODE.siteMode?'pri':''}" data-act="sitemode">${MODE.siteMode?'● โหมดหน้างาน':'เข้าหน้างาน'}</button>`:''}${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
   const m=$('#main');
   if(UI.route==='list')m.innerHTML=viewList();
   else if(UI.route==='defects')m.innerHTML=viewDefects();

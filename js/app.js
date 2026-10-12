@@ -141,11 +141,13 @@ window.addEventListener('resize',()=>{if(UI.route==='req'&&UI.tab==='preview')dr
 
 /* ========= boot ========= */
 (async function boot(){
+  try{if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}
+  {const _r=render;render=function(){_r();if(typeof updNetStatus==='function')updNetStatus()}}
   try{UI.grp=localStorage.getItem('grp')||'building'}catch(e){UI.grp='building'}
   const st=document.createElement('style');st.id='rcss';st.textContent=REPORT_CSS;document.head.appendChild(st);
   await initStorage();
   const m=$('#main');m.addEventListener('click',onMainClick);m.addEventListener('input',onMainInput);m.addEventListener('change',onMainChange);
-  $('#top').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){go(g.dataset.go);return}const a=e.target.closest('[data-act]');if(a&&a.dataset.act==='login')loginDialog();if(a&&a.dataset.act==='logout')logout()});
+  $('#top').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){go(g.dataset.go);return}const a=e.target.closest('[data-act]');if(a&&a.dataset.act==='login')loginDialog();if(a&&a.dataset.act==='sitemode')siteModeDialog();if(a&&a.dataset.act==='logout')logout()});
   if(memOnly)toast('เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า ให้กดสำรองเป็นไฟล์ก่อนปิด',6000);
   gcImages();render();
 })();
