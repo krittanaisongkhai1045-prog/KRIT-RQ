@@ -49,7 +49,9 @@ function onMainClick(e){
   case'openphoto':openPhoto(r,r.photos.find(p=>p.id===id));break;
   case'delphoto':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{r.photos=r.photos.filter(p=>p.id!==id);save();refreshTab()});break;
   case'mvphoto':{const i=r.photos.findIndex(p=>p.id===id),j=i+(+a.dataset.d);if(j>=0&&j<r.photos.length){const t=r.photos[i];r.photos[i]=r.photos[j];r.photos[j]=t;save();refreshTab()}break}
-  case'adddef':{const d=newDefect(r);if(r.type==='CLOSE'){r.scope=r.scope||[];r.scope.push(d.id)}save();refreshTab();editDefect(d,{req:r,canDelete:true,after:c=>{refreshTab()},pin:dd=>pinDefectFlow(r,dd)});break}
+  case'adddef':{const d=newDefect(r);if(r.type==='CLOSE'){r.scope=r.scope||[];r.scope.push(d.id)}save();refreshTab();editDefect(d,{req:r,canDelete:true,after:c=>{refreshTab()},pin:dd=>pinDefectFlow(r,dd),next:defectNext(r)});break}
+  case'copydef':{const src=defectById(id);if(!src||!canEditReq(r)){toast('คุณไม่มีสิทธิ์แก้ไขเอกสารชุดนี้');break}const nd=copyDefect(r,src);refreshTab();toast('คัดลอกแล้ว — แก้ห้อง/ตำแหน่ง แล้วปักหมุดหรือถ่ายรูป');editDefect(nd,{req:r,canDelete:true,after:()=>refreshTab(),pin:dd=>pinDefectFlow(r,dd),next:defectNext(r)});break}
+  case'copyfrom':{if(!canEditReq(r)){toast('คุณไม่มีสิทธิ์แก้ไขเอกสารชุดนี้');break}pickDefectToCopy(r,src=>{const nd=copyDefect(r,src);refreshTab();editDefect(nd,{req:r,canDelete:true,after:()=>refreshTab(),pin:dd=>pinDefectFlow(r,dd),next:defectNext(r)})});break}
   case'pindef':pinDefectFlow(r,defectById(id));break;
   case'setres':{r.res=r.res||{};const x=r.res[id]||(r.res[id]={});x.r=a.dataset.v;
     const sc=(r.scope||[]).map(i=>r.res[i]&&r.res[i].r);if(sc.length&&sc.every(Boolean))r.result=sc.every(v=>v==='pass')?'approved':'disapproved';
@@ -97,6 +99,8 @@ async function onMainChange(e){
   const t=e.target;
   if(await qcChange(t))return;const r=UI.route==='req'?curReq():null;
   if(MODE.ro)return;
+  if(t.dataset.dcard&&r){const fs=[...t.files];t.value='';if(fs.length&&canEditReq(r)){await addPhotoFiles(r,fs,t.dataset.dcard,t.dataset.stage)}return}
+  if(t.id==='defcam'&&r){const fs=[...t.files];t.value='';await quickDefect(r,fs);return}
   if(t.id==='photofile'&&r){await addPhotoFiles(r,[...t.files]);t.value='';return}
   if((t.id==='logofile'||t.dataset.sigfor)&&t.files[0]){const im=await fileToImage(t.files[0],700,.9);const id=await putImage(im.url);S.project[t.id==='logofile'?'logoId':t.dataset.sigfor]=id;save();render();return}
   if(t.id==='restorefile'&&t.files[0]){await doRestore(t.files[0]);t.value='';return}

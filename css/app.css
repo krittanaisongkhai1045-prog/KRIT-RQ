@@ -157,3 +157,7 @@ table.t input[type=text]{padding:3px 6px;font-size:13px}
 .rmtr td{background:var(--surface2);padding:6px 10px}
 .pgsel.on{outline:2px solid var(--accent,#1971c2);background:var(--surface2)}
 .pgck{font-size:20px;line-height:1;color:var(--accent,#1971c2);text-shadow:0 0 3px #fff}
+.dphotos{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+.dpg{min-width:150px}
+.dthumb{width:64px;height:48px;border-radius:5px;overflow:hidden;background:var(--surface2);cursor:pointer;border:1px solid var(--line)}
+.dthumb svg{width:100%;height:100%;display:block}

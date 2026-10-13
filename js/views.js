@@ -149,18 +149,33 @@ function editDefect(d,ctx){
      <label class="f">วิธีแก้เฉพาะจุด<select data-b="fix"><option value="">—</option>${opt(P.fixMethods,d.fix)}</select></label>
      <label class="f">ข้อควรระวัง / แผ่นข้างเคียงที่ห้ามกระทบ<textarea data-b="protect" rows="2">${esc(d.protect||'')}</textarea></label>
    </div>
+   <div id="dpsec"><h3 style="margin:16px 0 4px;font-size:15px">รูปของ DEFECT นี้ <span class="small muted" id="dpdoc" style="font-weight:400"></span></h3><div id="dpbox"></div></div>
    <div class="row" style="margin-top:16px">
+     ${ctx.next?`<button class="btn pri" data-x="next">✓ บันทึก + ถ่าย DEFECT ถัดไป</button>`:''}
+     ${ctx.req?`<button class="btn" data-x="copy">⧉ คัดลอก DEFECT นี้</button>`:''}
      ${ctx.req?`<button class="btn" data-x="pin">${d.loc?'ย้ายหมุดบนแบบ':'ปักหมุดบนแบบ'}</button>`:''}
      ${d.loc?`<span class="chip good">มีหมุดบนแบบแล้ว</span>`:`<span class="chip warn">ยังไม่ปักหมุด</span>`}
      ${ctx.canDelete?`<button class="btn bad" style="margin-left:auto" data-x="del">ลบ DEFECT</button>`:''}
    </div></div>`,'modal');
   const RO=MODE.ro||!canEditDefect(d);o.dataset.ro=RO?'1':'0';
-  if(RO){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del]',o).forEach(x=>x.remove())}
+  if(RO){$$('input,select,textarea',o).forEach(x=>x.disabled=true);$$('[data-x=mkgrid],[data-x=pin],[data-x=del],[data-x=next],[data-x=copy]',o).forEach(x=>x.remove())}
   const gbox=$('#gbox',o);
+  /* ถ่าย/แนบรูป DEFECT ได้ทันทีตอนตรวจหน้างาน (ก่อนแก้ / หลังแก้) */
+  const R=ctx.qc?null:(ctx.req||[...chainReqs(d.rootId)].reverse().find(q=>visibleDefects(q).some(x=>x.id===d.id))||reqById(d.foundIn));
+  let dpStage=(R&&R.type==='CLOSE'&&R.photos.some(p=>p.defectId===d.id&&p.stage==='before'))?'after':'before';
+  const dpPh=()=>R?R.photos.filter(p=>p.defectId===d.id):[];
+  function drawDP(){
+    if(!R){$('#dpsec',o).hidden=true;return}
+    $('#dpdoc',o).textContent='· บันทึกในใบ '+R.no;const ps=dpPh();
+    $('#dpbox',o).innerHTML=`${RO?'':`<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap"><span class="row" style="gap:0"><button class="btn sm ${dpStage==='before'?'pri':''}" data-dp="stage" data-v="before">ก่อนแก้</button><button class="btn sm ${dpStage==='after'?'pri':''}" data-dp="stage" data-v="after">หลังแก้</button></span>
+      <label class="btn pri" for="dpcam">📷 ถ่ายรูป (${dpStage==='before'?'ก่อนแก้':'หลังแก้'})</label><input id="dpcam" type="file" accept="image/*" capture="environment" hidden>
+      <label class="btn" for="dpfile">🖼 เลือกรูปจากเครื่อง</label><input id="dpfile" type="file" accept="image/*" multiple hidden></div>`}
+      ${ps.length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">${ps.map(p=>`<div class="card"><div class="thumb" data-dp="open" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div><div class="body"><span class="chip ${p.stage==='after'?'good':p.stage==='before'?'warn':''}">${p.stage==='after'?'หลังแก้':p.stage==='before'?'ก่อนแก้':'ทั่วไป'}</span><input type="text" data-dpcap="${p.id}" value="${esc(p.caption||'')}" placeholder="คำอธิบาย" ${RO?'disabled':''}>${RO?'':`<button class="btn sm bad" data-dp="del" data-id="${p.id}">ลบ</button>`}</div></div>`).join('')}</div>`:'<div class="empty small">ยังไม่มีรูปของ DEFECT นี้ — กด “ถ่ายรูป” ได้ทันที</div>'}`;
+  }
   function drawGrid(){const g=d.grid;if(!g||!g.cols){const pp=planOfDefect(d);gbox.innerHTML=pp?`<div style="height:170px;max-width:340px;border:1px solid var(--line);border-radius:6px;overflow:hidden">${locCropSvg(d,pp)}</div><p class="small muted" style="margin:6px 0 0">ยังไม่ได้สร้างผังกระเบื้อง · แสดงตำแหน่ง DEFECT บนแบบ “${esc(pp.name||'')}” แทน (ใบ DEFECT จะพิมพ์ภาพนี้)</p>`:'<div class="empty small">ยังไม่ได้สร้างผังกระเบื้อง (ข้ามได้ถ้าไม่จำเป็น)</div>';return}
     $('#gtools',o).hidden=RO;
     gbox.innerHTML=`<div class="gsvg-wrap">${gridSvg(g).replace('<svg','<svg class="gsvg" id="gsvg"')}</div><p class="small muted" style="margin:6px 0 0">${g.cols} คอลัมน์ × ${g.rows} แถว · เลือกอยู่ ${g.cells.length} แผ่น ${g.cells.length?'· '+esc(gridText(g)):''}</p>`}
-  drawGrid();
+  drawGrid();drawDP();
   /* ระบายหลายช่องด้วยการลาก */
   let paint=null;
   const cellAt=(sv,e)=>{const g=d.grid;const r=sv.getBoundingClientRect(),vb=sv.viewBox.baseVal;const x=(e.clientX-r.left)/r.width*vb.width,y=(e.clientY-r.top)/r.height*vb.height;const c=Math.floor(x/20)+1,row=g.rows-Math.floor(y/20);return(c<1||c>g.cols||row<1||row>g.rows)?null:c+','+row};
@@ -170,12 +185,21 @@ function editDefect(d,ctx){
   o.addEventListener('pointermove',e=>{if(!paint)return;const k=cellAt(paint.sv,e);if(k)setCell(paint.sv,k,paint.on)});
   const endPaint=()=>{if(paint){paint=null;save();drawGrid();if(ctx.after)ctx.after()}};o.addEventListener('pointerup',endPaint);o.addEventListener('pointercancel',endPaint);
   o.addEventListener('input',e=>{const t=e.target;
+    if(t.dataset.dpcap){const p=R&&R.photos.find(x=>x.id===t.dataset.dpcap);if(p){p.caption=t.value;save()}return}
     if(t.dataset.bz){d[t.dataset.bz]=t.checked;$('#zbox',o).hidden=!t.checked;save();if(ctx.after)ctx.after();return}
     if(t.dataset.b){d[t.dataset.b]=t.value;save();if(ctx.after)ctx.after()}
     if(t.dataset.g){d.grid=d.grid||{cells:[]};d.grid[t.dataset.g]=t.type==='number'?(+t.value||0):t.value;save()}});
+  o.addEventListener('change',async e=>{const t=e.target;if(!R||RO||(t.id!=='dpcam'&&t.id!=='dpfile'))return;const fs=[...t.files];t.value='';if(!fs.length)return;
+    await addPhotoFiles(R,fs,d.id,dpStage);drawDP();if(ctx.after)ctx.after()});
   o.addEventListener('click',e=>{
+    const dp=e.target.closest('[data-dp]');if(dp){const k=dp.dataset.dp;
+      if(k==='stage'){dpStage=dp.dataset.v;drawDP();return}
+      if(k==='open'){const p=R.photos.find(x=>x.id===dp.dataset.id);if(p)openBoard({kind:'photo',ro:RO,title:`${d.code} · ${p.stage==='after'?'หลังแก้':p.stage==='before'?'ก่อนแก้':'รูป'}`,imgUrl:imgSrc(p.imgId),w:p.w,h:p.h,shapes:p.shapes,onChange:save,onClose:drawDP});return}
+      if(k==='del'){armBtn(dp,'กดอีกครั้งเพื่อลบ',()=>{R.photos=R.photos.filter(x=>x.id!==dp.dataset.id);save();drawDP();if(ctx.after)ctx.after()});return}}
     const b=e.target.closest('[data-x]');if(b){const x=b.dataset.x;
       if(x==='close'||e.target===o){o.remove();ctx.after&&ctx.after(true);return}
+      if(x==='copy'){const rq=ctx.req;if(!rq)return;const nd=copyDefect(rq,d);o.remove();ctx.after&&ctx.after(true);toast('คัดลอกแล้ว — แก้ห้อง/ตำแหน่ง แล้วปักหมุดหรือถ่ายรูป');editDefect(nd,{req:rq,canDelete:true,after:()=>refreshTab(),pin:dd=>pinDefectFlow(rq,dd),next:defectNext(rq)});return}
+      if(x==='next'){o.remove();ctx.after&&ctx.after(true);ctx.next&&ctx.next();return}
       if(x==='gall'||x==='gnone'||x==='ginv'||x==='grange'){const g=d.grid;if(!g||!g.cols){toast('สร้างผังกระเบื้องก่อน');return}
         const all=[];for(let c=1;c<=g.cols;c++)for(let r=1;r<=g.rows;r++)all.push(c+','+r);
         if(x==='gall')g.cells=all;else if(x==='gnone')g.cells=[];else if(x==='ginv'){const st=new Set(g.cells);g.cells=all.filter(k=>!st.has(k))}
@@ -189,6 +213,45 @@ function editDefect(d,ctx){
       if(x==='del'){armBtn(b,'กดอีกครั้งเพื่อลบ',()=>{S.defects=S.defects.filter(z=>z.id!==d.id);Object.values(S.requests).forEach(r=>{r.scope=(r.scope||[]).filter(i=>i!==d.id);delete(r.res||{})[d.id];(r.photos||[]).forEach(p=>{if(p.defectId===d.id)p.defectId=''})});save();o.remove();ctx.after&&ctx.after(true)});return}}
     if(e.target===o){o.remove();ctx.after&&ctx.after(true)}
   });
+}
+/* ปักหมุดแล้วเด้งให้ถ่ายรูป/อัปโหลดของจุดนั้นทันที */
+function promptDefectPhoto(r,d,done){
+  const stage=(r.type==='CLOSE'&&r.photos.some(p=>p.defectId===d.id&&p.stage==='before'))?'after':'before';
+  if(MODE.ro||!canEditReq(r)||r.photos.some(p=>p.defectId===d.id&&p.stage===stage)){done&&done();return}
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:4px"><span class="mono">${esc(pinLabel(d))}</span> · ปักหมุดแล้ว</h3><p class="hint">เพิ่มรูป${stage==='after'?'หลังแก้':'ก่อนแก้'}ของจุดนี้เลย</p>
+   <div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn pri" for="pdcam">📷 ถ่ายรูป</label><input id="pdcam" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="pdfile">🖼 อัปโหลด</label><input id="pdfile" type="file" accept="image/*" multiple hidden><button class="btn" data-x="skip" style="margin-left:auto">ข้าม</button></div></div>`,'modal');
+  o.dataset.ro='0';
+  const fin=()=>{o.remove();done&&done()};
+  o.addEventListener('change',async e=>{const t=e.target;if(t.id!=='pdcam'&&t.id!=='pdfile')return;const fs=[...t.files];t.value='';if(!fs.length)return;await addPhotoFiles(r,fs,d.id,stage);fin()});
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x=skip]'))fin()});
+}
+/* คัดลอก DEFECT เดิม (ไม่เอารูป/หมุด/ช่องที่เลือกในผัง) เพื่อไม่ต้องกรอกใหม่ทั้งหมด */
+function copyDefect(r,src,loc){
+  const d=newDefect(r,loc||null);
+  ['item','type','desc','area','surface','face','fix','protect','due','zone','count','zoneNote'].forEach(k=>{if(src[k]!==undefined)d[k]=src[k]});
+  if(src.grid)d.grid={...clone(src.grid),cells:[]};
+  if(r.type==='CLOSE'){r.scope=r.scope||[];if(!r.scope.includes(d.id))r.scope.push(d.id)}
+  save();return d;
+}
+function pickDefectToCopy(r,cb){
+  const rid=rootId(r);let q='';
+  const all=S.defects.filter(d=>!d.qc).sort((a,b)=>((b.rootId===rid)-(a.rootId===rid))||(b.created||0)-(a.created||0));
+  const o=overlay(`<div class="box wide"><div class="row" style="margin-bottom:8px"><h3 style="margin-right:auto">คัดลอกจาก DEFECT เดิม</h3><button class="btn" data-x="close">ปิด</button></div>
+   <input type="search" id="cpq" placeholder="ค้นหารหัส / ห้อง / ประเภท / วิธีแก้" style="width:100%;margin-bottom:8px"><div id="cplist"></div></div>`,'modal');o.dataset.ro='0';
+  const draw=()=>{const l=q.toLowerCase();const ls=all.filter(d=>!l||[d.code,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(l)).slice(0,60);
+    $('#cplist',o).innerHTML=ls.length?ls.map(d=>`<button class="pickrow" data-d="${d.id}"><b class="mono">${esc(d.code)}</b><span style="flex:1;min-width:0"><span>${esc(d.area||'—')} ${esc(d.surface||'')}</span><span class="small muted" style="display:block">${esc(d.type||'')}${d.fix?' → '+esc(d.fix):''}${d.zone?' · โซน '+zoneCount(d)+' แผ่น':''}</span></span>${d.rootId===rid?'<span class="chip">ชุดนี้</span>':''}</button>`).join(''):'<div class="empty small">ไม่พบ DEFECT</div>'};draw();
+  o.addEventListener('input',e=>{if(e.target.id==='cpq'){q=e.target.value;draw()}});
+  o.addEventListener('click',e=>{if(e.target===o||e.target.closest('[data-x=close]')){o.remove();return}
+    const b=e.target.closest('[data-d]');if(b){const src=defectById(b.dataset.d);o.remove();if(src)cb(src)}});
+}
+/* ถ่ายรูปที่หน้างานแล้วสร้าง DEFECT ใหม่ให้ทันที (รูปเป็น “ก่อนแก้”) แล้วเปิดหน้ากรอกรายละเอียด */
+function defectNext(r){return()=>{refreshTab();const c=$('#defcam');if(c)c.click()}}
+async function quickDefect(r,files){
+  if(!canEditReq(r)){toast('คุณไม่มีสิทธิ์แก้ไขเอกสารชุดนี้');return}
+  if(!files.length)return;
+  const d=newDefect(r);if(r.type==='CLOSE'){r.scope=r.scope||[];r.scope.push(d.id)}
+  await addPhotoFiles(r,files,d.id,'before');save();refreshTab();
+  editDefect(d,{req:r,canDelete:true,after:()=>refreshTab(),pin:dd=>pinDefectFlow(r,dd),next:defectNext(r)});
 }
 function newDefect(r,loc){
   const rid=rootId(r);const n=nextDefectCode(rid);
@@ -342,12 +405,14 @@ function openPlan(r,pl,pinFor){
     onPinMove:()=>save(),
     onPinClick:(id,redraw)=>{const d=defectById(id);if(d)editDefect(d,{req:r,canDelete:d.foundIn===r.id,after:(closed)=>{redraw();},pin:dd=>{board.close();openPlan(r,pl,dd)}})},
     onPinAdd:async(x,y,redraw)=>{
-      if(pinFor){pinFor.loc={planKey:pl.key,x,y};save();pinFor=null;board.redraw();toast('ปักหมุดแล้ว');board.setTool('select');return}
+      if(pinFor){const pd=pinFor;pd.loc={planKey:pl.key,x,y};save();pinFor=null;board.redraw();toast('ปักหมุดแล้ว');board.setTool('select');promptDefectPhoto(r,pd,()=>board.redraw());return}
       const un=visibleDefects(r).filter(d=>!d.loc);
-      const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุดที่จุดนี้</h3>${un.map(d=>`<button class="pickrow" data-d="${d.id}"><b class="mono">${esc(d.code)}</b><span class="small">${esc(d.area||'')} ${esc(d.type||'')}</span></button>`).join('')}<button class="pickrow" data-d="new" style="border-style:dashed"><b>＋ DEFECT ใหม่ที่จุดนี้</b></button><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-d="no">ยกเลิก</button></div></div>`,'modal');
+      const o=overlay(`<div class="box"><h3 style="margin-bottom:10px">ปักหมุดที่จุดนี้</h3>${un.map(d=>`<button class="pickrow" data-d="${d.id}"><b class="mono">${esc(d.code)}</b><span class="small">${esc(d.area||'')} ${esc(d.type||'')}</span></button>`).join('')}<button class="pickrow" data-d="new" style="border-style:dashed"><b>＋ DEFECT ใหม่ที่จุดนี้</b></button><button class="pickrow" data-d="copy" style="border-style:dashed"><b>⧉ คัดลอกจาก DEFECT เดิม แล้วปักที่จุดนี้</b></button><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-d="no">ยกเลิก</button></div></div>`,'modal');
       o.addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b&&e.target!==o)return;o.remove();if(!b||b.dataset.d==='no')return;
-        let d;if(b.dataset.d==='new'){d=newDefect(r,{planKey:pl.key,x,y})}else{d=defectById(b.dataset.d);d.loc={planKey:pl.key,x,y}}
-        save();board.redraw();if(b.dataset.d==='new')editDefect(d,{req:r,canDelete:true,after:()=>board.redraw()})});
+        const finish=(d,isNew)=>{save();board.redraw();promptDefectPhoto(r,d,()=>{board.redraw();if(isNew)editDefect(d,{req:r,canDelete:true,after:()=>board.redraw(),pin:dd=>{board.close();openPlan(r,pl,dd)},next:defectNext(r)})})};
+        if(b.dataset.d==='copy'){pickDefectToCopy(r,src=>finish(copyDefect(r,src,{planKey:pl.key,x,y}),true));return}
+        if(b.dataset.d==='new'){finish(newDefect(r,{planKey:pl.key,x,y}),true);return}
+        const d=defectById(b.dataset.d);d.loc={planKey:pl.key,x,y};finish(d,false)});
     },
     onClose:()=>{refreshTab()}});
   return board;
@@ -390,7 +455,7 @@ function tabDefects(r){
   if(isC){
     const cand=chainDefects(rid).filter(d=>{const st=defectStatus(d);return st!=='closed'||(r.scope||[]).includes(d.id)});
     h+=`<div class="panel"><h3>เลือกจุดที่ส่งตรวจรอบนี้ (${(r.scope||[]).length}/${cand.length})</h3><p class="hint">ใบรอบ CLOSE จะมีเฉพาะจุดที่เลือก ทั้งในแบบ รูป และตารางใบ DEFECT</p><div class="row" style="gap:14px">${cand.map(d=>`<label class="chk"><input type="checkbox" data-scope="${d.id}" ${(r.scope||[]).includes(d.id)?'checked':''}> <span class="mono">${esc(d.code)}</span> <span class="small muted">${esc(d.area||'')}</span></label>`).join('')||'<span class="muted">ไม่มี DEFECT ค้างแก้</span>'}</div></div>`}
-  h+=`<div class="row" style="margin-bottom:10px"><button class="btn pri" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT ใหม่ที่พบรอบนี้':'เพิ่ม DEFECT'}</button><select data-defgroup="1" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(r.defGroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><span class="hint" style="margin:0">เรียงตามชื่อ DEFECT ในแต่ละกลุ่ม · กระเบื้องหลายแผ่นในห้องเดียวกันให้ติ๊ก “DEFECT แบบโซน” ในหน้าแก้ไข รวมเป็นรายการเดียว · บันทึกผลตรวจของแต่ละจุดด้านล่าง</span></div>`;
+  h+=`<div class="row" style="margin-bottom:10px"><label class="btn pri" for="defcam">📷 ถ่าย DEFECT ใหม่ (หน้างาน)</label><input id="defcam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="adddef">＋ ${isC?'เพิ่ม DEFECT (ไม่มีรูป)':'เพิ่ม DEFECT'}</button><button class="btn" data-act="copyfrom">⧉ คัดลอกจาก DEFECT เดิม</button><select data-defgroup="1" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(r.defGroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><span class="hint" style="margin:0">เรียงตามชื่อ DEFECT ในแต่ละกลุ่ม · กระเบื้องหลายแผ่นในห้องเดียวกันให้ติ๊ก “DEFECT แบบโซน” ในหน้าแก้ไข รวมเป็นรายการเดียว · บันทึกผลตรวจของแต่ละจุดด้านล่าง</span></div>`;
   if(!vis.length)return h+`<div class="empty">ยังไม่มี DEFECT ในใบนี้</div>`;
   for(const gp of groupRooms(vis,r.defGroup||'room')){
    const tiles=gp.list.reduce((n,x)=>n+zoneCount(x),0);
@@ -402,7 +467,10 @@ function tabDefects(r){
        <div>${esc(d.type||'ยังไม่ระบุประเภท')}${d.desc?` — ${esc(d.desc)}`:''}</div>
        ${d.zone&&d.zoneNote?`<div class="small">ขอบเขตโซน: ${esc(d.zoneNote)}</div>`:''}<div class="small muted">${d.grid&&d.grid.cells&&d.grid.cells.length?esc(gridText(d.grid)):'ไม่มีผังกระเบื้อง'}</div>
        ${d.fix?`<div class="small">วิธีแก้: ${esc(d.fix)}</div>`:''}
-       <div class="row" style="margin-top:6px">${d.loc?'<span class="chip good">มีหมุดบนแบบ</span>':`<button class="btn sm" data-act="pindef" data-id="${d.id}">ปักหมุดบนแบบ</button>`}<button class="btn sm" data-act="editdef" data-id="${d.id}">แก้ไข</button></div>
+       <div class="row" style="margin-top:6px">${d.loc?'<span class="chip good">มีหมุดบนแบบ</span>':`<button class="btn sm" data-act="pindef" data-id="${d.id}">ปักหมุดบนแบบ</button>`}<button class="btn sm" data-act="editdef" data-id="${d.id}">แก้ไข</button>${MODE.ro?'':`<button class="btn sm" data-act="copydef" data-id="${d.id}">⧉ คัดลอก</button>`}</div>
+       <div class="dphotos">${[['before','ก่อนแก้'],['after','หลังแก้']].map(([st,tx])=>{const ps=r.photos.filter(p=>p.defectId===d.id&&p.stage===st);
+         return`<div class="dpg"><div class="row" style="gap:6px"><b class="small">${tx} (${ps.length})</b>${MODE.ro?'':`<label class="btn sm" for="dc-${d.id}-${st}-c">📷 ถ่าย</label><input id="dc-${d.id}-${st}-c" data-dcard="${d.id}" data-stage="${st}" type="file" accept="image/*" capture="environment" hidden><label class="btn sm" for="dc-${d.id}-${st}-f">🖼 อัปโหลด</label><input id="dc-${d.id}-${st}-f" data-dcard="${d.id}" data-stage="${st}" type="file" accept="image/*" multiple hidden>`}</div>
+          ${ps.length?`<div class="row" style="gap:4px;margin-top:4px">${ps.map(p=>`<div class="dthumb" data-act="openphoto" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[])}</div>`).join('')}</div>`:''}</div>`}).join('')}</div>
        ${isC&&(r.scope||[]).includes(d.id)?`<div class="row" style="margin-top:8px"><span class="small muted">ผลตรวจรอบนี้:</span>${[['pass','ผ่าน','good'],['fail','ไม่ผ่าน','bad'],['','ยังไม่ตรวจ','']].map(o=>`<button class="btn sm ${res.r===o[0]||(!res.r&&o[0]==='')?'pri':''}" data-act="setres" data-id="${d.id}" data-v="${o[0]}">${o[1]}</button>`).join('')}<input type="text" data-res="${d.id}" placeholder="หมายเหตุ" value="${esc(res.note||'')}" style="width:200px"></div>`:''}
       </div>
       <div>${d.grid&&d.grid.cols?`<div class="gsv">${gridSvg(d.grid)}</div>`:''}</div></div>`}}

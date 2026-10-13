@@ -24,7 +24,7 @@ function viewQC(){
   const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
-   ${owner?'<button class="btn pri" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF</button><button class="btn" data-act="qchtml">HTML</button></div>
+   ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF</button><button class="btn" data-act="qchtml">HTML</button></div>
    <p class="hint" style="margin:0 0 10px">ใช้บันทึกงานที่พบจากการตรวจ QC โดยไม่ต้องมีใบ Inspection: ถ่ายรูปก่อนแก้ → แก้ → ถ่ายรูปหลังแก้ → ปิด · ปักหมุดตำแหน่งบน “แบบหน้างาน” และระบุแผ่นกระเบื้องที่ต้องแก้ได้</p>
    <div class="stats"><div><b>${all.length}</b><span>ทั้งหมด</span></div><div><b style="color:var(--bad)">${cnt('open')}</b><span>ต้องแก้ไข</span></div><div><b style="color:var(--warn)">${cnt('fixed')}</b><span>แก้แล้ว รอตรวจซ้ำ</span></div><div><b style="color:var(--good)">${cnt('closed')}</b><span>ปิดแล้ว</span></div></div>
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
@@ -62,7 +62,7 @@ function editQC(d,ctx){
   const opt=(arr,v)=>arr.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
   const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro=ro?'1':'0';const box=$('.box',o);
   const photoCol=(stage,title,cls)=>{const L=d[stage]||[];
-    return`<div class="qcol"><div class="row" style="margin-bottom:6px"><b class="tg ${cls}" style="position:static">${title}</b><span class="small muted">${L.length} รูป</span>${ro?'':`<label class="btn sm" for="qf-${stage}" style="margin-left:auto">＋ เพิ่มรูป</label><input id="qf-${stage}" data-qstage="${stage}" type="file" accept="image/*" multiple hidden>`}</div>
+    return`<div class="qcol"><div class="row" style="margin-bottom:6px"><b class="tg ${cls}" style="position:static">${title}</b><span class="small muted">${L.length} รูป</span>${ro?'':`<label class="btn sm" for="qc-${stage}" style="margin-left:auto">📷 ถ่าย</label><input id="qc-${stage}" data-qstage="${stage}" type="file" accept="image/*" capture="environment" hidden><label class="btn sm" for="qf-${stage}">＋ เพิ่มรูป</label><input id="qf-${stage}" data-qstage="${stage}" type="file" accept="image/*" multiple hidden>`}</div>
      ${L.length?`<div class="qph">${L.map(p=>`<div class="qp"><div class="thumb" data-q="open" data-st="${stage}" data-id="${p.id}">${qcThumb(p)}</div><input type="text" data-qp="${stage}:${p.id}" value="${esc(p.caption)}" placeholder="คำอธิบาย" ${ro?'disabled':''}>${ro?'':`<button class="btn sm bad" data-q="delp" data-st="${stage}" data-id="${p.id}">ลบ</button>`}</div>`).join('')}</div>`:`<div class="empty small">${stage==='before'?'ยังไม่มีรูปก่อนแก้':'ยังไม่มีรูปหลังแก้'}</div>`}</div>`};
   function draw(){
     const st=d.status||'open';const lib=d.loc&&libById(d.loc.libId);
@@ -347,6 +347,9 @@ function qcInput(t){
   return false;
 }
 async function qcChange(t){
+  if(t.id==='qccam'&&!MODE.ro){const fs=[...t.files];t.value='';if(!fs.length)return true;if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return true}
+    try{const n=await Promise.resolve(allocNo('qc',1));const d=newQC(null,n);await addQCPhotos(d,'before',fs);render();editQC(d,{after:()=>render()})}catch(x){toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000)}
+    return true}
   if(t.id==='sitefile'&&!MODE.ro){
     const files=[...t.files];t.value='';if(!files.length)return true;
     const byBase=new Map();let nPdf=0,nCad=0;
