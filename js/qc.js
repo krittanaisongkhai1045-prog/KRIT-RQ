@@ -7,8 +7,8 @@ const qcImageIds=()=>qcList().flatMap(d=>[...(d.before||[]),...(d.after||[])].ma
 function qcNext(){const n=qcList().reduce((m,d)=>Math.max(m,d.num||0),0)+1;return{num:n,code:'QC-'+String(n).padStart(3,'0')}}
 function newQC(loc,num0){
   const n=num0!=null?{num:num0,code:'QC-'+String(num0).padStart(3,'0')}:qcNext();
-  const d={id:'df'+uid(),qc:true,rootId:'',foundIn:'',num:n.num,code:n.code,status:'open',building:'',area:'',surface:'',face:'',type:'',desc:'',fix:'',protect:'',due:'',grid:null,loc:loc||null,before:[],after:[],found:todayISO(),fixedOn:'',closedOn:'',created:Date.now()};
-  const last=qcList().slice(-1)[0];if(last){d.building=last.building||'';d.area=last.area;d.surface=last.surface}
+  const d={id:'df'+uid(),qc:true,rootId:'',foundIn:'',num:n.num,code:n.code,status:'open',building:'',area:'',surface:'',face:'',type:'',desc:'',fix:'',protect:'',due:'',floor:'',scope:'',inspector:'',owner:'',note:'',grid:null,loc:loc||null,before:[],after:[],found:todayISO(),fixedOn:'',closedOn:'',created:Date.now()};
+  const last=qcList().slice(-1)[0];if(last){d.building=last.building||'';d.floor=last.floor||'';d.area=last.area;d.surface=last.surface;d.inspector=last.inspector||'';d.owner=last.owner||''}
   S.defects.push(d);save();return d;
 }
 const libById=id=>S.library.find(l=>l.id===id);
@@ -24,14 +24,16 @@ function viewQC(){
   const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
-   ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF</button><button class="btn" data-act="qchtml">HTML</button></div>
+   ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF${UI.qv==='table'?' (ตาราง)':''}</button><button class="btn" data-act="qchtml">HTML${UI.qv==='table'?' (ตาราง)':''}</button></div>
    <p class="hint" style="margin:0 0 10px">ใช้บันทึกงานที่พบจากการตรวจ QC โดยไม่ต้องมีใบ Inspection: ถ่ายรูปก่อนแก้ → แก้ → ถ่ายรูปหลังแก้ → ปิด · ปักหมุดตำแหน่งบน “แบบหน้างาน” และระบุแผ่นกระเบื้องที่ต้องแก้ได้</p>
    <div class="stats"><div><b>${all.length}</b><span>ทั้งหมด</span></div><div><b style="color:var(--bad)">${cnt('open')}</b><span>ต้องแก้ไข</span></div><div><b style="color:var(--warn)">${cnt('fixed')}</b><span>แก้แล้ว รอตรวจซ้ำ</span></div><div><b style="color:var(--good)">${cnt('closed')}</b><span>ปิดแล้ว</span></div></div>
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
+   <label class="row small muted" style="gap:6px">มุมมอง<select id="qv" style="width:auto;color:var(--fg)"><option value="card" ${UI.qv!=='table'?'selected':''}>การ์ด</option><option value="table" ${UI.qv==='table'?'selected':''}>ตาราง DEFECTS LIST</option></select></label>
    <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>
    <input type="search" id="qq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.qq||'')}" style="width:220px"></div>`;
   const ds=qcFiltered();
   if(!ds.length)return h+`<div class="empty">${all.length?'ไม่มีรายการในมุมมองนี้':owner?'ยังไม่มี QC DEFECT กด “บันทึก DEFECT ใหม่” หรือเปิด “แบบหน้างาน” แล้วปักหมุดที่จุดที่พบ':'ยังไม่มีข้อมูล'}</div>`;
+  if(UI.qv==='table')return h+qcTableView(ds);
   const key=d=>g==='building'?(d.building?'อาคาร '+d.building:'ไม่ระบุอาคาร'):g==='area'?(d.area||'ไม่ระบุพื้นที่'):g==='type'?(d.type||'ไม่ระบุประเภท'):'';
   const groups=new Map();ds.forEach(d=>{const k=key(d);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(d)});
   for(const k of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true}))){
@@ -74,14 +76,20 @@ function editQC(d,ctx){
      <div class="grid g2" style="margin-top:14px">
       <label class="f">รหัส<input type="text" data-qf="code" value="${esc(d.code)}"></label>
       <label class="f">อาคาร<input type="text" data-qf="building" value="${esc(d.building||'')}" list="qcbld"></label>
+      <label class="f">ชั้นที่<input type="text" data-qf="floor" value="${esc(d.floor||'')}"></label>
       <label class="f">ห้อง / พื้นที่<input type="text" data-qf="area" value="${esc(d.area||'')}"></label>
+      <label class="f">Scope งาน<input type="text" data-qf="scope" value="${esc(d.scope||'')}" placeholder="เช่น งานกระเบื้อง งานสี งานฝ้า" list="qcscope"></label>
+      <label class="f">ผู้ตรวจ<input type="text" data-qf="inspector" value="${esc(d.inspector||'')}"></label>
+      <label class="f">ผู้รับผิดชอบ<input type="text" data-qf="owner" value="${esc(d.owner||'')}" placeholder="ผู้รับเหมา / หัวหน้าช่าง"></label>
       <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">พื้นผิว<select data-qf="surface"><option value="">—</option>${opt(SURFACES,d.surface)}</select></label><label class="f">ด้าน / แนว<input type="text" data-qf="face" value="${esc(d.face||'')}"></label></div>
       <label class="f">ประเภท DEFECT<select data-qf="type"><option value="">—</option>${opt(P.defectTypes,d.type)}</select></label>
       <label class="f">กำหนดแก้เสร็จ<input type="date" data-qf="due" value="${esc(d.due||'')}"></label>
       <label class="f">วันที่พบ<input type="date" data-qf="found" value="${esc(d.found||'')}"></label>
       <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">วันที่แก้แล้ว<input type="date" data-qf="fixedOn" value="${esc(d.fixedOn||'')}"></label><label class="f">วันที่ปิด<input type="date" data-qf="closedOn" value="${esc(d.closedOn||'')}"></label></div>
      </div><datalist id="qcbld">${[...new Set([...qcList().map(x=>x.building),...S.requests.map(r=>r.building)].filter(Boolean))].map(b=>`<option>${esc(b)}</option>`).join('')}</datalist>
+     <datalist id="qcscope">${[...new Set(qcList().map(x=>x.scope).filter(Boolean))].map(b=>`<option>${esc(b)}</option>`).join('')}</datalist>
      <label class="f" style="margin-top:10px">รายละเอียด<textarea data-qf="desc" rows="2">${esc(d.desc||'')}</textarea></label>
+     <label class="f" style="margin-top:10px">หมายเหตุ<input type="text" data-qf="note" value="${esc(d.note||'')}"></label>
      <label class="f" style="margin-top:10px">วิธีแก้เฉพาะจุด<select data-qf="fix"><option value="">—</option>${opt(P.fixMethods,d.fix)}</select></label>
      <div class="row" style="margin-top:12px"><button class="btn" data-q="detail">${ro?'ดู':'ระบุ'}แผ่นกระเบื้องที่ต้องแก้ / ข้อควรระวัง</button>
       ${d.grid&&d.grid.cells&&d.grid.cells.length?`<span class="small">${esc(gridText(d.grid))}</span>`:'<span class="small muted">ยังไม่ระบุแผ่น</span>'}</div>
@@ -272,6 +280,17 @@ const QC_REPORT_CSS=`
 .qs .im{flex:1;min-height:0;border:1px solid #bbb;background:#f2f2f2;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}.qs .im svg{width:100%;height:100%;display:block}
 .qs .im i{color:#999;font-size:12px;font-style:normal}.qs .cp{font-size:10.5px;color:#333;min-height:13px}
 .qr{display:flex;flex-direction:column;gap:6px;font-size:10.5px;min-width:0}.qr .rb{border:1px solid #bbb;height:150px;overflow:hidden;background:#f2f2f2}.qr .rb svg{width:100%;height:100%;display:block}.qr .tt{font-weight:700;font-size:11px}
+.dlp{position:absolute;inset:0;padding:16px 22px;font-size:11px;color:#111}
+.dl-title{text-align:center;font-weight:700;font-size:17px;letter-spacing:.04em;border:1px solid #111;padding:5px 0;font-family:'Sarabun',serif}
+.dl-loc{display:flex;gap:28px;border:1px solid #111;border-top:0;background:#fde4d3;padding:6px 8px;font-size:12px}
+.dl-pj{display:flex;border:1px solid #111;border-top:0;font-size:11.5px}.dl-pj .l{flex:1;padding:3px 6px;border-right:1px solid #111}.dl-pj .l .v{font-weight:700;margin-left:20px}.dl-pj .r{width:380px;padding:3px 6px;display:flex;align-items:center}
+.dl-tb{width:100%;border-collapse:collapse;table-layout:fixed;border:1px solid #111}
+.dl-tb th{border:1px solid #111;font-size:10.5px;font-weight:700;padding:3px 2px;line-height:1.2;text-align:center}
+.dl-tb td{border:1px solid #111;padding:3px 4px;vertical-align:top;font-size:10.5px;height:180px;overflow:hidden;word-break:break-word}
+.dl-tb td.c{text-align:center}.dl-tb td.dph{padding:2px;text-align:center}
+.dl-im{height:148px;background:#f2f2f2;overflow:hidden}.dl-im svg{width:100%;height:100%;display:block}
+.dl-none{color:#aaa;padding-top:60px}.dl-more{font-size:9.5px;color:#555}.dl-cap{font-size:9.5px;color:#333;line-height:1.15}
+.dl-code{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:#555;margin-top:2px}.dl-tk{font-size:16px;font-weight:700}
 .qpf{position:absolute;left:28px;right:28px;bottom:14px;display:flex;justify-content:space-between;font-size:10px;color:#666}
 `;
 function qcPages(list){
@@ -298,15 +317,58 @@ function qcPages(list){
   }
   const N=pages.length;return pages.map((p,i)=>({land:true,html:p.html.replace('%%P%%',i+1).replace('%%N%%',N)}));
 }
+
+/* ---------- ตาราง DEFECTS LIST OF WORK (ตามแบบฟอร์ม) ---------- */
+const QC_ROWS_PER_PAGE=3;
+const qcPass=d=>d.status==='closed'?'p':(d.status||'open')==='open'?'f':'';
+const qcDesc=d=>[d.desc,[d.type,d.fix&&('วิธีแก้: '+d.fix)].filter(Boolean).join(' · '),d.grid&&d.grid.cells&&d.grid.cells.length?gridText(d.grid):''].filter(Boolean);
+const qcAreaTxt=d=>[d.area,[d.surface,d.face].filter(Boolean).join(' ')].filter(Boolean);
+const qcScope=d=>d.scope||d.type||'';
+function qcGroups(list){
+  const m=new Map();list.forEach(d=>{const k=(d.building||'')+'\u0001'+(d.floor||'');if(!m.has(k))m.set(k,{building:d.building||'',floor:d.floor||'',list:[]});m.get(k).list.push(d)});
+  return [...m.values()].sort((a,b)=>natCmp(a.building,b.building)||natCmp(a.floor,b.floor));
+}
+function qcDateRange(list){const ds=list.map(d=>d.found).filter(Boolean).sort();if(!ds.length)return '';const a=fmtDate(ds[0]),b=fmtDate(ds[ds.length-1]);return a===b?a:a+' – '+b}
+const qcTick=(on)=>on?'<span class="dl-tk">✓</span>':'';
+function qcTablePages(list){
+  const P=S.project;const pages=[];const subject=(P.qcSubject||'ตรวจสอบงาน QC · DEFECT Before / After');
+  for(const g of qcGroups(list)){
+    const types=[...new Set(g.list.map(qcScope).filter(Boolean))].join(', ');
+    const np=Math.max(1,Math.ceil(g.list.length/QC_ROWS_PER_PAGE));
+    for(let k=0;k<np;k++){
+      const rows=g.list.slice(k*QC_ROWS_PER_PAGE,(k+1)*QC_ROWS_PER_PAGE);
+      const ph=L=>{const p=(L||[])[0];return p?`<div class="dl-im">${qcThumb(p)}</div>${(L.length>1)?`<div class="dl-more">+${L.length-1} รูป</div>`:''}${p.caption?`<div class="dl-cap">${esc(p.caption)}</div>`:''}`:'<div class="dl-none">—</div>'};
+      const tr=(d,i)=>{const pf=d?qcPass(d):'';return d?`<tr><td class="c"><b>${k*QC_ROWS_PER_PAGE+i+1}</b><div class="dl-code">${esc(d.code)}</div></td><td>${qcAreaTxt(d).map(esc).join('<br>')}</td><td class="dph">${ph(d.before)}</td><td class="dph">${ph(d.after)}</td><td>${qcDesc(d).map(esc).join('<br>')}</td><td>${esc(qcScope(d))}</td><td class="c">${esc(fmtDate(d.found)||'')}</td><td class="c">${esc(fmtDate(d.due)||'')}</td><td class="c">${qcTick(pf==='p')}</td><td class="c">${qcTick(pf==='f')}</td><td class="c">${esc(d.inspector||'')}</td><td class="c">${esc(d.owner||'')}</td><td>${esc(d.note||'')}</td></tr>`:'<tr>'+'<td></td>'.repeat(13)+'</tr>'};
+      const body=[...rows.map(tr),...Array.from({length:QC_ROWS_PER_PAGE-rows.length},()=>tr(null))].join('');
+      pages.push({land:true,html:`<div class="dlp"><div class="dl-title">DEFECTS LIST OF WORK</div>
+       <div class="dl-loc"><span><b>Location</b> อาคาร ${esc(g.building||'-')}</span><span><b>ชั้นที่</b> ${esc(g.floor||'-')}</span><span style="flex:1"><b>TYPE :</b> ${esc(types||'-')}</span></div>
+       <div class="dl-pj"><div class="l"><div><b>โครงการ / (Project) :</b> <span class="v">${esc(P.name)}</span></div><div><b>เรื่อง / (Subject) :</b> ${esc(subject)}</div></div><div class="r"><b>วันที่ตรวจสอบ / (Inspection date) :</b> ${esc(qcDateRange(g.list))}</div></div>
+       <table class="dl-tb"><colgroup><col style="width:40px"><col style="width:90px"><col style="width:175px"><col style="width:175px"><col style="width:150px"><col style="width:70px"><col style="width:62px"><col style="width:62px"><col style="width:34px"><col style="width:40px"><col style="width:58px"><col style="width:58px"><col></colgroup>
+       <thead><tr><th rowspan="2">ลำดับ<br>Item</th><th rowspan="2">พื้นที่<br>Area</th><th rowspan="2">ภาพก่อน<br>Photo Defect Before</th><th rowspan="2">ภาพหลัง<br>Photo Defect After</th><th rowspan="2">รายละเอียดของงาน<br>Description Defect</th><th rowspan="2">Scope งาน</th><th rowspan="2">วันที่<br>ตรวจสอบ</th><th rowspan="2">กำหนดวัน<br>แล้วเสร็จ</th><th colspan="2">ผลการตรวจสอบ</th><th rowspan="2">ผู้ตรวจ</th><th rowspan="2">ผู้รับ<br>ผิดชอบ</th><th rowspan="2">หมายเหตุ</th></tr><tr><th>ผ่าน</th><th>ไม่ผ่าน</th></tr></thead><tbody>${body}</tbody></table>
+       <div class="qpf"><span>${esc(P.name)} · อาคาร ${esc(g.building||'-')} ชั้น ${esc(g.floor||'-')}${np>1?` (หน้า ${k+1}/${np})`:''}</span><span>%%P%% / %%N%%</span></div></div>`});
+    }
+  }
+  const N=pages.length;return pages.map((p,i)=>({land:true,html:p.html.replace('%%P%%',i+1).replace('%%N%%',N)}));
+}
+/* ตารางบนหน้าจอ (เลื่อนซ้าย-ขวาได้) — แตะแถวเพื่อแก้ไข */
+function qcTableView(ds){
+  let h='';
+  for(const g of qcGroups(ds)){
+    h+=`<div class="ghead l1"><b>${g.building?'อาคาร '+esc(g.building):'ไม่ระบุอาคาร'}${g.floor?' · ชั้น '+esc(g.floor):''}</b><span class="small muted">${g.list.length} จุด</span></div>
+     <div class="qtw"><table class="qtv"><thead><tr><th>ลำดับ</th><th>พื้นที่</th><th>ภาพก่อน</th><th>ภาพหลัง</th><th>รายละเอียด</th><th>Scope งาน</th><th>วันที่ตรวจ</th><th>กำหนดเสร็จ</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>ผู้ตรวจ</th><th>ผู้รับผิดชอบ</th><th>หมายเหตุ</th></tr></thead><tbody>
+     ${g.list.map((d,i)=>{const pf=qcPass(d);const b=(d.before||[])[0],a=(d.after||[])[0];return`<tr data-act="qcopen" data-id="${d.id}"><td><b>${i+1}</b><div class="mono small">${esc(d.code)}</div></td><td>${qcAreaTxt(d).map(esc).join('<br>')||'<span class="muted">—</span>'}</td><td class="dph">${b?`<div class="im">${qcThumb(b)}</div>`:'<i>—</i>'}</td><td class="dph">${a?`<div class="im">${qcThumb(a)}</div>`:'<i>—</i>'}</td><td>${qcDesc(d).map(esc).join('<br>')}</td><td>${esc(qcScope(d))}</td><td>${esc(fmtDate(d.found)||'')}</td><td>${esc(fmtDate(d.due)||'')}</td><td class="c">${pf==='p'?'✓':''}</td><td class="c">${pf==='f'?'✓':''}</td><td>${esc(d.inspector||'')}</td><td>${esc(d.owner||'')}</td><td>${esc(d.note||'')}</td></tr>`}).join('')}</tbody></table></div>`;
+  }
+  return h;
+}
 async function qcPrepare(list){
   const ids=[];list.forEach(d=>{[...(d.before||[]),...(d.after||[])].forEach(p=>ids.push(p.imgId));const l=d.loc&&libById(d.loc.libId);if(l)ids.push(l.imgId)});
   await ensureData(ids);await ensureData([S.project.logoId,S.project.sigId],true);
 }
 async function exportQC(kind){
   const list=qcFiltered();if(!list.length){toast('ไม่มีรายการในมุมมองนี้');return}
-  const name=`QC-BeforeAfter_${todayISO()}`;
+  const name=(UI.qv==='table'?'QC-DefectsList_':'QC-BeforeAfter_')+todayISO();
   try{
-    toast(kind==='pdf'?'กำลังสร้าง PDF…':'กำลังสร้างไฟล์…',4000);await qcPrepare(list);const pages=qcPages(list);
+    toast(kind==='pdf'?'กำลังสร้าง PDF…':'กำลังสร้างไฟล์…',4000);await qcPrepare(list);const pages=(UI.qv==='table'?qcTablePages:qcPages)(list);
     const css=REPORT_CSS+QC_REPORT_CSS;
     if(kind==='html'){
       const doc=`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${name}</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Sarabun:wght@300;400;500;600;700&display=swap"><style>${css}body{margin:0;background:#777}.sheet{margin:12px auto}@page{size:A4 landscape;margin:0}@media print{body{background:none}.sheet{margin:0;page-break-after:always;break-after:page}}</style></head><body>${pages.map(p=>`<div class="sheet land">${p.html}</div>`).join('')}</body></html>`;
@@ -341,6 +403,7 @@ const QCACT={
 };
 function qcInput(t){
   if(t.id==='qf'){UI.qf=t.value;$('#main').innerHTML=viewQC();return true}
+  if(t.id==='qv'){UI.qv=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qg'){UI.qg=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qq'){UI.qq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewQC();const q=$('#qq');q.focus();q.setSelectionRange(p,p);return true}
   if(t.dataset&&t.dataset.sl){if(MODE.ro)return true;if(fileItems(t.dataset.sl).length){setFileMeta(t.dataset.sl,t.dataset.k,t.value);save()}return true}
@@ -385,5 +448,11 @@ async function qcChange(t){
 .qcols{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.qcols{grid-template-columns:1fr}}
 .qph{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .qp{display:flex;flex-direction:column;gap:5px}.qp .thumb{background:var(--surface2);aspect-ratio:4/3;border-radius:6px;overflow:hidden;cursor:pointer}.qp .thumb svg{width:100%;height:100%;display:block}
+
+.qtw{overflow-x:auto;margin-bottom:14px;border:1px solid var(--line);border-radius:8px}
+.qtv{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}
+.qtv th{background:var(--surface2);padding:7px 6px;font-size:12px;border:1px solid var(--line);white-space:nowrap}
+.qtv td{border:1px solid var(--line);padding:6px;vertical-align:top}.qtv tbody tr{cursor:pointer}.qtv tbody tr:hover{background:var(--surface2)}
+.qtv td.c{text-align:center;font-weight:700;color:var(--good)}.qtv td.dph{width:130px;min-width:130px}.qtv .im{width:122px;height:92px;background:var(--surface2);overflow:hidden;border-radius:4px}.qtv .im svg{width:100%;height:100%;display:block}
 .nav{overflow-x:auto;scrollbar-width:none}.nav button{white-space:nowrap}
 `+QC_REPORT_CSS;document.head.appendChild(s)})();
