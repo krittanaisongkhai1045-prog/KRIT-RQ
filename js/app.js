@@ -47,15 +47,18 @@ function onMainClick(e){
   case'addplan':planPicker(r);break;
   case'openplan':openPlan(r,r.plans.find(p=>p.id===id));break;
   case'delplan':{const pl=r.plans.find(p=>p.id===id);if(!pl)break;
-    const sole=r.plans.filter(p=>p.key===pl.key).length<=1;   // ลบสำเนาสุดท้ายของแบบนี้ในใบนี้เท่านั้นที่ต้องเคลียร์ DEFECT
-    const rid=rootId(r);const gone=(sole&&r.type==='CLOSE')?S.defects.filter(d=>!d.qc&&d.rootId===rid&&d.loc&&d.loc.planKey===pl.key):[];
+    const rid=rootId(r);const rest=r.plans.filter(p=>p.id!==id);
+    const same=(p,q)=>p.key===q.key||(p.imgId&&p.imgId===q.imgId);                       // แบบเดียวกัน = key เดียวกัน หรือใช้ภาพแบบเดียวกัน
+    const pinnedTo=(d,p)=>{if(!d.loc||!d.loc.planKey)return false;if(d.loc.planKey===p.key)return true;const o=planOfDefect(d);return !!(o&&same(o,p))};
+    const stays=!!rest.find(p=>same(p,pl));
+    const gone=(!stays&&r.type==='CLOSE')?S.defects.filter(d=>!d.qc&&d.rootId===rid&&pinnedTo(d,pl)):[];
     armBtn(a,gone.length?`กดอีกครั้งเพื่อลบแบบ + DEFECT ${gone.length} รายการ`:'กดอีกครั้งเพื่อลบ',()=>{
-      r.plans=r.plans.filter(p=>p.id!==id);
-      if(sole){
+      r.plans=rest;
+      if(!stays){
         if(gone.length){const ids=new Set(gone.map(d=>d.id));S.defects=S.defects.filter(d=>!ids.has(d.id));
           chainReqs(rid).forEach(q=>{if(q.scope)q.scope=q.scope.filter(x=>!ids.has(x));if(q.res)ids.forEach(k=>delete q.res[k]);q.photos=(q.photos||[]).filter(ph=>!ids.has(ph.defectId))});
           toast(`ลบ DEFECT ที่เชื่อมกับแบบนี้ ${ids.size} รายการแล้ว`)}
-        S.defects.forEach(d=>{if(d.loc&&d.loc.planKey===pl.key&&d.rootId===rid)d.loc=null})}
+        S.defects.forEach(d=>{if(d.rootId===rid&&pinnedTo(d,pl))d.loc=null})}
       save();refreshTab()});break}
   case'openphoto':openPhoto(r,r.photos.find(p=>p.id===id));break;
   case'delphoto':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{r.photos=r.photos.filter(p=>p.id!==id);save();refreshTab()});break;

@@ -58,11 +58,11 @@ async function readLocal(){
 }
 async function loadAll(){try{const l=await readLocal();IDBH=l.h;S=l.st;l.imgs.forEach((v,k)=>IMG.set(k,v))}catch(e){memOnly=true;S=null}}
 const setSS=t=>{const e=$('#savestate');if(e)e.textContent=t};
-function save(){if(MODE.kind==='cloud'?!MODE.uid:MODE.ro)return;clearTimeout(saveT);saveT=setTimeout(saveNow,MODE.kind==='cloud'?700:350);setSS('กำลังบันทึก…');
-  if(MODE.kind==='cloud'){clearTimeout(stashT);stashT=setTimeout(()=>{try{stashDirty(docsOf())}catch(e){}},0)}}   // สำรองลงเครื่องทันที กันรีหน้า/ปิดแท็บก่อนส่งขึ้นคลาวด์
+function save(){if(MODE.kind==='cloud'?!MODE.uid:MODE.ro)return;clearTimeout(saveT);saveT=setTimeout(saveNow,MODE.kind==='cloud'?1200:350);setSS('กำลังบันทึก…');
+  if(MODE.kind==='cloud'){clearTimeout(stashT);stashT=setTimeout(()=>{try{stashDirty(docsOf())}catch(e){}},1500)}}   // สำรองลงเครื่องทันที กันรีหน้า/ปิดแท็บก่อนส่งขึ้นคลาวด์
 let stashT=null;
 function flushNow(){if(MODE.kind==='cloud'&&MODE.uid){clearTimeout(saveT);try{stashDirty(docsOf())}catch(e){}cloudFlush()}else if(MODE.kind!=='cloud'&&!MODE.ro){clearTimeout(saveT);saveNow()}}
-if(typeof window!=='undefined'){window.addEventListener('pagehide',flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushNow()})}
+if(typeof window!=='undefined'){window.addEventListener('pagehide',flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushNow();if(MODE.kind==='cloud'&&MODE.uid)setTimeout(()=>refreshCache(true),1500)}})}
 function docsOf(){const m=new Map();m.set('meta/project',S.project);S.library.forEach(l=>m.set('plans/'+l.id,l));S.requests.forEach(r=>m.set('requests/'+r.id,r));S.defects.forEach(d=>m.set('defects/'+d.id,d));return m}
 const splitKey=k=>{const i=k.indexOf('/');return[k.slice(0,i),k.slice(i+1)]};
 const isDenied=e=>e&&(e.code==='42501'||/row-level security|permission denied|not authorized|no permission|login required|only owner|admin only/i.test((e.message||'')));
@@ -72,7 +72,8 @@ function cloudError(e){
   setSS('บันทึกไม่สำเร็จ');toast('บันทึกขึ้น Supabase ไม่สำเร็จ: '+msg,6000);
 }
 /* อัปเดตข้อมูลสำรองสำหรับเปิดแบบออฟไลน์/โหมดหน้างานให้ตรงกับงานล่าสุดทุกครั้งที่ส่งสำเร็จ (เดิมอัปเดตเฉพาะตอนโหลดจากเซิร์ฟเวอร์ ทำให้เปิดใหม่แล้วเห็นข้อมูลเก่า รายการที่เพิ่งเพิ่มหาย) */
-function refreshCache(){try{const rows=[];docsOf().forEach((o,k)=>{const[c,id]=splitKey(k);const a=MODE.acl.get(k)||{};rows.push({collection:c,id,data:o,grp:a.grp||grpOf(c,o),owner_id:a.owner_id||MODE.uid,owner_email:a.owner_email||MODE.email,access:a.access||'members',readers:a.readers||[],editors:a.editors||[]})});obPut('cache','rows:'+(MODE.uid||'anon'),JSON.parse(JSON.stringify(rows)))}catch(e){}}
+let cacheT=0;
+function refreshCache(force){if(!force&&Date.now()-cacheT<30000)return;cacheT=Date.now();try{const rows=[];docsOf().forEach((o,k)=>{const[c,id]=splitKey(k);const a=MODE.acl.get(k)||{};rows.push({collection:c,id,data:o,grp:a.grp||grpOf(c,o),owner_id:a.owner_id||MODE.uid,owner_email:a.owner_email||MODE.email,access:a.access||'members',readers:a.readers||[],editors:a.editors||[]})});obPut('cache','rows:'+(MODE.uid||'anon'),JSON.parse(JSON.stringify(rows)))}catch(e){}}
 async function cloudFlush(){
   if(MODE.busy){MODE.dirty=true;return}
   MODE.busy=true;let denied=0;
@@ -153,7 +154,7 @@ function applyRows(data){
 }
 async function reloadCloud(){try{await loadCloud();render()}catch(e){toast('โหลดข้อมูลไม่สำเร็จ: '+((e&&e.message)||e),5000)}}
 let rerenderT=null;
-function schedRerender(){clearTimeout(rerenderT);rerenderT=setTimeout(()=>{if($('.ov')){schedRerender();return}render()},600)}
+function schedRerender(){clearTimeout(rerenderT);rerenderT=setTimeout(()=>{const ae=document.activeElement;if($('.ov')||(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)&&ae.closest('#main'))){schedRerender();return}const y=window.scrollY;render();window.scrollTo(0,y)},800)}
 /* ระหว่างเปิดกระดานวาด/หน้าต่างแก้ไข ห้ามสลับอ็อบเจกต์ข้อมูลใต้เท้า (ไม่งั้นเส้น/ลูกศรที่วาดต่อจะไปลงอ็อบเจกต์เก่าแล้วหาย) */
 function applyRemote(ev,n,o){
   if(typeof document!=='undefined'&&document.querySelector('.ov')){(MODE.defer=MODE.defer||[]).push([ev,n,o]);clearTimeout(MODE.dt);MODE.dt=setTimeout(flushDefer,800);return}
@@ -173,7 +174,8 @@ function applyRemoteNow(ev,n,o){
     else if(row.collection==='plans')S.library=S.library.filter(x=>x.id!==row.id);
   }else{
     MODE.acl.set(key,{collection:n.collection,id:n.id,grp:n.grp,owner_id:n.owner_id,owner_email:n.owner_email,access:n.access,readers:n.readers||[],editors:n.editors||[]});
-    const str=JSON.stringify(n.data);if(MODE.snap.get(key)===str){schedRerender();return}
+    const str=JSON.stringify(n.data);if(MODE.snap.get(key)===str)return;
+    const cur0=docsOf().get(key);if(cur0&&JSON.stringify(cur0)===str){MODE.snap.set(key,str);return}   // เสียงสะท้อนจากการบันทึกของเราเอง ไม่ต้องวาดหน้าใหม่
     /* ถ้าเรามีการแก้ในเครื่องที่ยังไม่ได้บันทึก ให้คงของเราไว้ (จะบันทึกทับตอน save) */
     const cur=docsOf().get(key);if(cur&&MODE.snap.has(key)&&JSON.stringify(cur)!==MODE.snap.get(key))return;
     MODE.snap.set(key,str);
