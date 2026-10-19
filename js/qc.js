@@ -321,9 +321,9 @@ function qcPages(list){
 
 /* ---------- ตาราง DEFECTS LIST OF WORK (ตามแบบฟอร์ม) ---------- */
 const QC_ROWS_PER_PAGE=3;
-const PF_OPTS=[['','ตามสถานะอัตโนมัติ'],['p','ผ่าน'],['f','ไม่ผ่าน'],['n','ไม่ระบุ (เว้นว่าง)']];
+const PF_OPTS=[['','อัตโนมัติ (ปิดแล้ว=ผ่าน, ที่เหลือเว้นว่าง)'],['p','ผ่าน'],['f','ไม่ผ่าน'],['n','ไม่ระบุ (เว้นว่าง)']];
 const pfSelect=(attr,d)=>`<label class="f">ผลในตาราง DEFECTS LIST (ผ่าน / ไม่ผ่าน)<select ${attr}="result">${PF_OPTS.map(o=>`<option value="${o[0]}" ${(d.result||'')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>`;
-const qcPass=d=>d.result==='p'||d.result==='f'?d.result:d.result==='n'?'':(d.status==='closed'?'p':(d.status||'open')==='open'?'f':'');
+const qcPass=d=>d.result==='p'||d.result==='f'?d.result:d.result==='n'?'':(d.status==='closed'?'p':'');
 const qcDesc=d=>[d.desc,[d.type,d.fix&&('วิธีแก้: '+d.fix)].filter(Boolean).join(' · '),d.grid&&d.grid.cells&&d.grid.cells.length?gridText(d.grid):''].filter(Boolean);
 const qcAreaTxt=d=>[d.area,[d.surface,d.face].filter(Boolean).join(' ')].filter(Boolean);
 const qcScope=d=>d.scope||d.type||'';
@@ -462,10 +462,10 @@ async function qcChange(t){
 `+QC_REPORT_CSS;document.head.appendChild(s)})();
 
 /* ---------- DEFECT ตามใบตรวจ → ตาราง DEFECTS LIST แบบเดียวกับ QC ---------- */
-function dfAsQC(d){
+function dfAsQC(d,req){
   const root=reqById(d.rootId)||{};const chain=chainReqs(d.rootId);const fr=reqById(d.foundIn)||root;
   const before=[],after=[];chain.forEach(x=>(x.photos||[]).forEach(p=>{if(p.defectId===d.id){(p.stage==='after'?after:before).push(p)}}));
-  let res=null;for(const x of chain.filter(x=>x.type==='CLOSE').reverse()){const y=x.res&&x.res[d.id];if(y&&y.r){res=y.r;break}}
+  let res=null;if(req&&req.res&&req.res[d.id]&&req.res[d.id].r)res=req.res[d.id].r;else for(const x of chain.filter(x=>x.type==='CLOSE').reverse()){const y=x.res&&x.res[d.id];if(y&&y.r){res=y.r;break}}
   const auto=res==='pass'?'p':res==='fail'?'f':'';
   const itemT=(()=>{for(const g of S.project.checklist||[])for(const i of g.items)if(i.id===d.item)return i.th||i.en;return''})();
   return{id:d.id,code:d.code,building:fr.building||root.building||'',floor:fr.floor||root.floor||'',area:d.area,surface:d.surface,face:d.face,type:d.type,desc:d.desc,fix:d.fix,grid:d.grid,

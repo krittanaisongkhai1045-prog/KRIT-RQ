@@ -1,6 +1,6 @@
 /* Service worker: เก็บตัวแอปไว้ในเครื่อง เปิดได้แม้ไม่มีอินเทอร์เน็ต / สัญญาณอ่อน
    (ข้อมูลและรูปจาก Supabase ไม่ผ่านที่นี่ — แอปเก็บเองใน IndexedDB) */
-const V='idesk-v6';
+const V='idesk-v8';
 const SHELL=['./','index.html','css/app.css','config.js','js/core.js','js/storage.js','js/views.js','js/report.js','js/qc.js','js/app.js','assets/logo.png','assets/signature.png',
  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js',
  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
