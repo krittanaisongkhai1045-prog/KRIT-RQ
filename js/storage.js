@@ -71,6 +71,8 @@ function cloudError(e){
   if(isDenied(e)){setSS('ไม่มีสิทธิ์แก้ไข');toast('คุณไม่มีสิทธิ์แก้ไขรายการนี้ (หรือยังไม่ได้เข้าสู่ระบบ)',5000);return}
   setSS('บันทึกไม่สำเร็จ');toast('บันทึกขึ้น Supabase ไม่สำเร็จ: '+msg,6000);
 }
+/* อัปเดตข้อมูลสำรองสำหรับเปิดแบบออฟไลน์/โหมดหน้างานให้ตรงกับงานล่าสุดทุกครั้งที่ส่งสำเร็จ (เดิมอัปเดตเฉพาะตอนโหลดจากเซิร์ฟเวอร์ ทำให้เปิดใหม่แล้วเห็นข้อมูลเก่า รายการที่เพิ่งเพิ่มหาย) */
+function refreshCache(){try{const rows=[];docsOf().forEach((o,k)=>{const[c,id]=splitKey(k);const a=MODE.acl.get(k)||{};rows.push({collection:c,id,data:o,grp:a.grp||grpOf(c,o),owner_id:a.owner_id||MODE.uid,owner_email:a.owner_email||MODE.email,access:a.access||'members',readers:a.readers||[],editors:a.editors||[]})});obPut('cache','rows:'+(MODE.uid||'anon'),JSON.parse(JSON.stringify(rows)))}catch(e){}}
 async function cloudFlush(){
   if(MODE.busy){MODE.dirty=true;return}
   MODE.busy=true;let denied=0;
@@ -85,7 +87,7 @@ async function cloudFlush(){
         if(error){if(isDenied(error)){denied++;continue}throw error}
         if(!data||!data.length)denied++;else{MODE.snap.delete(k);MODE.acl.delete(k)}}
     }while(MODE.dirty);
-    await obClear('docs');MODE.netFail=0;updNetStatus();
+    await obClear('docs');MODE.netFail=0;refreshCache();updNetStatus();
   }catch(e){
     if(isDenied(e))cloudError(e);
     else{MODE.netFail=(MODE.netFail||0)+1;if(MODE.netFail===1)toast('สัญญาณอ่อน/ส่งไม่สำเร็จ — งานเก็บไว้ในเครื่องแล้ว ระบบจะลองส่งใหม่เอง',6000);updNetStatus();scheduleRetry()}}
@@ -126,8 +128,15 @@ async function gcImages(){
 }
 /* ----- cloud: load / live updates / auth ----- */
 function fillState(p,lib,rq,df){S={project:p||defaultProject(),library:lib||[],requests:rq||[],defects:df||[]}}
+/* Supabase ตอบกลับสูงสุด 1,000 แถวต่อครั้ง (ตั้งโดยเซิร์ฟเวอร์) ต้องดึงทีละหน้าและเรียงลำดับให้คงที่ ไม่งั้นแถวใหม่ๆ จะถูกตัดทิ้งเงียบๆ เมื่อเอกสารเกิน 1,000 */
+async function fetchAllDocs(){
+  const cols='collection,id,data,'+ACLCOLS.replace('collection,id,','');const out=[];
+  for(let from=0;;from+=1000){
+    const{data,error}=await MODE.sb.from('docs').select(cols).order('collection',{ascending:true}).order('id',{ascending:true}).range(from,from+999);
+    if(error)return{data:null,error};out.push(...data);if(data.length<1000)break}
+  return{data:out,error:null}}
 async function loadCloud(){
-  const{data,error}=await MODE.sb.from('docs').select('collection,id,data,'+ACLCOLS.replace('collection,id,','')).range(0,9999);
+  const{data,error}=await fetchAllDocs();
   if(error)throw error;
   obPut('cache','rows:'+(MODE.uid||'anon'),data);
   return applyRows(data);
@@ -303,7 +312,7 @@ async function netRetry(){
 async function loadCloudKeepLocal(){
   const dirty=[...docsOf()].filter(([k,o])=>MODE.snap.get(k)!==JSON.stringify(o));
   if(dirty.length)throw new Error('ยังมีงานค้างส่ง');
-  const{data,error}=await MODE.sb.from('docs').select('collection,id,data,'+ACLCOLS.replace('collection,id,','')).range(0,9999);
+  const{data,error}=await fetchAllDocs();
   if(error)throw error;
   obPut('cache','rows:'+(MODE.uid||'anon'),data);applyRows(data)}
 async function restoreOutbox(){
