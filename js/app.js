@@ -38,14 +38,25 @@ function onMainClick(e){
   case'openreq':go('req',id,'info');break;
   case'delchain':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{deleteChain(id);render()});e.stopPropagation();break;
   case'delreq':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{const q=reqById(id);if(q.type==='OPEN')deleteChain(rootId(q));else{S.requests=S.requests.filter(x=>x.id!==id);save()}go('list')});break;
+  case'dfpdf':{const ds=S.defects.filter(d=>!d.qc).map(d=>({d,st:defectStatus(d)})).filter(x=>{const f=UI.dfilter,q=(UI.dq||'').toLowerCase();return(f==='all'||(f==='open'?x.st!=='closed':f==='need'?x.st==='open':x.st===f))&&(!q||[x.d.code,x.d.area,x.d.type,x.d.desc].join(' ').toLowerCase().includes(q))}).map(x=>x.d);
+    exportQC('pdf',{list:dfTableList(ds).sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true})),table:true,name:'DefectsList_'+todayISO()});break}
   case'editdef':editDefect(defectById(id),{req:r,canDelete:true,after:(c)=>{if(c)render()},pin:d=>r&&pinDefectFlow(r,d)});break;
   case'cyc':{const c=cell(r,a.dataset.item);const col=a.dataset.col;const nx={'':'P',P:'F',F:'N',N:''}[c[col]||''];c[col]=nx;
     if(nx&&(col==='r1'||col==='r2')){const dc=col==='r1'?'d1':'d2';if(!c[dc])c[dc]=fmtDate(r.date)}save();refreshTab();break}
   case'autoresult':autoResult(r);refreshTab();toast('สรุปผลจาก DEFECT แล้ว');break;
   case'addplan':planPicker(r);break;
   case'openplan':openPlan(r,r.plans.find(p=>p.id===id));break;
-  case'delplan':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{const pl=r.plans.find(p=>p.id===id);r.plans=r.plans.filter(p=>p.id!==id);
-    if(!r.plans.some(p=>p.key===pl.key))S.defects.forEach(d=>{if(d.loc&&d.loc.planKey===pl.key)d.loc=null});save();refreshTab()});break;
+  case'delplan':{const pl=r.plans.find(p=>p.id===id);if(!pl)break;
+    const sole=r.plans.filter(p=>p.key===pl.key).length<=1;   // ลบสำเนาสุดท้ายของแบบนี้ในใบนี้เท่านั้นที่ต้องเคลียร์ DEFECT
+    const rid=rootId(r);const gone=(sole&&r.type==='CLOSE')?S.defects.filter(d=>!d.qc&&d.rootId===rid&&d.loc&&d.loc.planKey===pl.key):[];
+    armBtn(a,gone.length?`กดอีกครั้งเพื่อลบแบบ + DEFECT ${gone.length} รายการ`:'กดอีกครั้งเพื่อลบ',()=>{
+      r.plans=r.plans.filter(p=>p.id!==id);
+      if(sole){
+        if(gone.length){const ids=new Set(gone.map(d=>d.id));S.defects=S.defects.filter(d=>!ids.has(d.id));
+          chainReqs(rid).forEach(q=>{if(q.scope)q.scope=q.scope.filter(x=>!ids.has(x));if(q.res)ids.forEach(k=>delete q.res[k]);q.photos=(q.photos||[]).filter(ph=>!ids.has(ph.defectId))});
+          toast(`ลบ DEFECT ที่เชื่อมกับแบบนี้ ${ids.size} รายการแล้ว`)}
+        S.defects.forEach(d=>{if(d.loc&&d.loc.planKey===pl.key&&d.rootId===rid)d.loc=null})}
+      save();refreshTab()});break}
   case'openphoto':openPhoto(r,r.photos.find(p=>p.id===id));break;
   case'delphoto':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{r.photos=r.photos.filter(p=>p.id!==id);save();refreshTab()});break;
   case'mvphoto':{const i=r.photos.findIndex(p=>p.id===id),j=i+(+a.dataset.d);if(j>=0&&j<r.photos.length){const t=r.photos[i];r.photos[i]=r.photos[j];r.photos[j]=t;save();refreshTab()}break}
@@ -68,9 +79,10 @@ function onMainInput(e){
   const t=e.target;
   if(qcInput(t))return;
   if(t.id==='grp'){UI.grp=t.value;try{localStorage.setItem('grp',t.value)}catch(x){}$('#main').innerHTML=viewList();return}
-  if(MODE.ro&&!['q','dq','dfilter','dgroup'].includes(t.id))return;
+  if(MODE.ro&&!['q','dq','dfilter','dgroup','dview'].includes(t.id))return;
   if(t.id==='q'){UI.q=t.value;const p=t.selectionStart;$('#main').innerHTML=viewList();const q=$('#q');q.focus();q.setSelectionRange(p,p);return}
   if(t.id==='dq'){UI.dq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewDefects();const q=$('#dq');q.focus();q.setSelectionRange(p,p);return}
+  if(t.id==='dview'){UI.dview=t.value;$('#main').innerHTML=viewDefects();return}
   if(t.id==='dgroup'){UI.dgroup=t.value;$('#main').innerHTML=viewDefects();return}
   if(t.id==='dfilter'){UI.dfilter=t.value;$('#main').innerHTML=viewDefects();return}
   const r=UI.route==='req'?curReq():null;

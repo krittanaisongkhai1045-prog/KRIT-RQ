@@ -21,7 +21,7 @@ function pickKind(role,cb){
 }
 function go(route,id,tab){if(route!==UI.route){UI.siteFile=null;UI.siteEdit=null}UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
 
-function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','dgroup','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
+function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','dgroup','dview','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
 function render(){
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
@@ -103,8 +103,9 @@ function viewDefects(){
   
   let h=`<div class="row" style="margin-bottom:12px"><h1 style="font-size:22px;margin-right:auto">DEFECT ตามใบตรวจ</h1>
    <select id="dfilter" style="width:auto">${[['open','ค้างแก้ / รอผล'],['need','ต้องแก้ไข'],['submitted','รอผลตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
-   <select id="dgroup" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(UI.dgroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><input type="search" id="dq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.dq||'')}" style="width:220px"></div>`;
+   <select id="dview" style="width:auto" aria-label="มุมมอง"><option value="list" ${UI.dview!=='table'?'selected':''}>มุมมอง: รายการ</option><option value="table" ${UI.dview==='table'?'selected':''}>มุมมอง: ตาราง DEFECTS LIST</option></select>${UI.dview==='table'?'<button class="btn" data-act="dfpdf">PDF ตาราง</button>':''}<select id="dgroup" style="width:auto" aria-label="จัดกลุ่ม">${[['room','จัดกลุ่ม: ห้อง / พื้นที่'],['item','จัดกลุ่ม: หมวดงาน']].map(o=>`<option value="${o[0]}" ${(UI.dgroup||'room')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select><input type="search" id="dq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.dq||'')}" style="width:220px"></div>`;
   if(!ds.length)return h+`<div class="empty">ไม่มี DEFECT ในมุมมองนี้</div>`;
+  if(UI.dview==='table'){const list=dfTableList(ds.map(x=>x.d)).sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));return h+qcTableView(list,'editdef')}
   h+=`<div class="tw"><table class="t"><thead><tr><th>รหัส</th><th>สถานะ</th><th>ห้อง / ตำแหน่ง</th><th>ประเภท</th><th>ตำแหน่งกระเบื้อง</th><th>วิธีแก้เฉพาะจุด</th><th>พบใน</th></tr></thead><tbody>`;
   const stOf=new Map(ds.map(x=>[x.d.id,x.st]));const mode=UI.dgroup||'room';
   for(const gp of groupRooms(ds.map(x=>x.d),mode)){
@@ -128,6 +129,7 @@ function editDefect(d,ctx){
      <div class="grid" style="grid-template-columns:1fr 1fr"><label class="f">พื้นผิว<select data-b="surface"><option value="">—</option>${opt(SURFACES,d.surface)}</select></label><label class="f">ด้าน / แนว (A,B,C,D)<input type="text" data-b="face" value="${esc(d.face||'')}"></label></div>
      <label class="f">ประเภท DEFECT<select data-b="type"><option value="">—</option>${opt(P.defectTypes,d.type)}</select></label>
      <label class="f">กำหนดแก้ไขเสร็จ<input type="date" data-b="due" value="${esc(d.due||'')}"></label>
+     ${ctx.qc?'':pfSelect('data-b',d)}
    </div>
    <label class="chk" style="margin-top:12px"><input type="checkbox" data-bz="zone" ${d.zone?'checked':''}> <b>DEFECT แบบโซน</b> <span class="small muted">— รวมหลายแผ่นในพื้นที่เดียวกัน (เช่น กระเบื้องพื้นทั้งห้อง 50 แผ่น) เป็นรายการเดียว</span></label>
    <div id="zbox" class="grid g2" style="margin-top:8px" ${d.zone?'':'hidden'}><label class="f">จำนวนแผ่นที่ต้องแก้ (เว้นว่าง = นับจากช่องที่เลือกในผัง)<input type="number" min="0" data-b="count" value="${esc(d.count||'')}"></label>
