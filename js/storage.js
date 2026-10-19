@@ -58,7 +58,11 @@ async function readLocal(){
 }
 async function loadAll(){try{const l=await readLocal();IDBH=l.h;S=l.st;l.imgs.forEach((v,k)=>IMG.set(k,v))}catch(e){memOnly=true;S=null}}
 const setSS=t=>{const e=$('#savestate');if(e)e.textContent=t};
-function save(){if(MODE.kind==='cloud'?!MODE.uid:MODE.ro)return;clearTimeout(saveT);saveT=setTimeout(saveNow,MODE.kind==='cloud'?700:350);setSS('กำลังบันทึก…')}
+function save(){if(MODE.kind==='cloud'?!MODE.uid:MODE.ro)return;clearTimeout(saveT);saveT=setTimeout(saveNow,MODE.kind==='cloud'?700:350);setSS('กำลังบันทึก…');
+  if(MODE.kind==='cloud'){clearTimeout(stashT);stashT=setTimeout(()=>{try{stashDirty(docsOf())}catch(e){}},0)}}   // สำรองลงเครื่องทันที กันรีหน้า/ปิดแท็บก่อนส่งขึ้นคลาวด์
+let stashT=null;
+function flushNow(){if(MODE.kind==='cloud'&&MODE.uid){clearTimeout(saveT);try{stashDirty(docsOf())}catch(e){}cloudFlush()}else if(MODE.kind!=='cloud'&&!MODE.ro){clearTimeout(saveT);saveNow()}}
+if(typeof window!=='undefined'){window.addEventListener('pagehide',flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushNow()})}
 function docsOf(){const m=new Map();m.set('meta/project',S.project);S.library.forEach(l=>m.set('plans/'+l.id,l));S.requests.forEach(r=>m.set('requests/'+r.id,r));S.defects.forEach(d=>m.set('defects/'+d.id,d));return m}
 const splitKey=k=>{const i=k.indexOf('/');return[k.slice(0,i),k.slice(i+1)]};
 const isDenied=e=>e&&(e.code==='42501'||/row-level security|permission denied|not authorized|no permission|login required|only owner|admin only/i.test((e.message||'')));
