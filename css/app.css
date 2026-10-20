@@ -161,3 +161,26 @@ table.t input[type=text]{padding:3px 6px;font-size:13px}
 .dpg{min-width:150px}
 .dthumb{width:64px;height:48px;border-radius:5px;overflow:hidden;background:var(--surface2);cursor:pointer;border:1px solid var(--line)}
 .dthumb svg{width:100%;height:100%;display:block}
+
+/* ===== โหมดแอปมือถือ (iOS/Android): เต็มจอพอดี, แถบเมนูล่าง, พื้นที่ปลอดภัย, ไม่ซูมตอนแตะช่องกรอก ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+body{min-height:100vh;min-height:100dvh;touch-action:manipulation;-webkit-touch-callout:none}
+.top{top:0;padding-top:calc(8px + env(safe-area-inset-top,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media(max-width:820px){
+  input,select,textarea{font-size:16px!important}            /* iOS จะไม่ซูมหน้าเมื่อแตะช่องกรอก */
+  .top{gap:8px;flex-wrap:nowrap;padding-top:calc(6px + env(safe-area-inset-top,0px));padding-bottom:6px}
+  .brand b{font-size:16px}.brand span{max-width:46vw}
+  .top>.btn,.top>.chip{flex:none}
+  .top{overflow-x:auto;scrollbar-width:none}.top::-webkit-scrollbar{display:none}
+  .nav{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;gap:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;background:var(--surface);border-top:1px solid var(--line);padding:4px max(4px,env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left,0px));box-shadow:0 -4px 14px rgba(0,0,0,.08)}
+  .nav::-webkit-scrollbar{display:none}
+  .nav button{flex:1 0 auto;min-width:72px;min-height:46px;padding:6px 10px;border-radius:10px;font-size:12px;line-height:1.2;white-space:normal;text-align:center}
+  .wrap{padding-top:12px;padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+  .btn{min-height:40px}.btn.sm{min-height:34px}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}.tw table.t{min-width:720px}.tw table.t td:first-child,.tw table.t th:first-child{min-width:150px}
+  .ov.modal{padding:0;align-items:flex-end}
+  .ov.modal>.box,.ov.modal>.box.wide{max-width:100%;border-radius:16px 16px 0 0;max-height:94%;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+  .toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))!important}
+}
+@media(display-mode:standalone){body{-webkit-user-select:none;user-select:none}input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text}}
