@@ -33,7 +33,7 @@ function viewQC(){
    <input type="search" id="qq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.qq||'')}" style="width:220px"></div>`;
   const ds=qcFiltered();
   if(!ds.length)return h+`<div class="empty">${all.length?'ไม่มีรายการในมุมมองนี้':owner?'ยังไม่มี QC DEFECT กด “บันทึก DEFECT ใหม่” หรือเปิด “แบบหน้างาน” แล้วปักหมุดที่จุดที่พบ':'ยังไม่มีข้อมูล'}</div>`;
-  if(UI.qv==='table')return h+qcTableView(ds);
+  if(UI.qv==='table')return h+(MODE.ro?qcTableView(ds):qcTableEdit(ds));
   const key=d=>g==='building'?(d.building?'อาคาร '+d.building:'ไม่ระบุอาคาร'):g==='area'?(d.area||'ไม่ระบุพื้นที่'):g==='type'?(d.type||'ไม่ระบุประเภท'):'';
   const groups=new Map();ds.forEach(d=>{const k=key(d);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(d)});
   for(const k of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true}))){
@@ -353,6 +353,26 @@ function qcTablePages(list){
   }
   const N=pages.length;return pages.map((p,i)=>({land:true,html:p.html.replace('%%P%%',i+1).replace('%%N%%',N)}));
 }
+/* ตารางแก้ไขในตัว: กรอกรายละเอียด/ใส่รูปหลายรูป/ติ๊กผ่าน-ไม่ผ่านได้ในช่องเลย */
+function qcTableEdit(ds){
+  let h='';
+  const ph=(d,st,can)=>{const L=d[st]||[];const p=L[0];
+    return`<div class="ph">${p?`<div class="im" data-act="qcopen" data-id="${d.id}" title="แตะเพื่อดู/ลบรูป">${qcThumb(p)}</div>`:'<i class="muted">—</i>'}${L.length>1?`<span class="small muted">+${L.length-1} รูป</span>`:''}
+     ${can?`<div class="row"><label class="btn sm" for="tp-${st}-${d.id}">🖼 เพิ่มรูป</label><input id="tp-${st}-${d.id}" data-qtph="${st}:${d.id}" type="file" accept="image/*" multiple hidden></div>`:''}</div>`};
+  for(const g of qcGroups(ds)){
+    h+=`<div class="ghead l1"><b>${g.building?'อาคาร '+esc(g.building):'ไม่ระบุอาคาร'}${g.floor?' · ชั้น '+esc(g.floor):''}</b><span class="small muted">${g.list.length} จุด · พิมพ์ในช่องได้เลย บันทึกอัตโนมัติ</span></div>
+     <div class="qtw"><table class="qtv qte"><thead><tr><th>ลำดับ</th><th>พื้นที่</th><th>ภาพก่อน</th><th>ภาพหลัง</th><th>รายละเอียด</th><th>Scope งาน</th><th>วันที่ตรวจ</th><th>กำหนดเสร็จ</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>ผู้ตรวจ</th><th>ผู้รับผิดชอบ</th><th>หมายเหตุ</th></tr></thead><tbody>
+     ${g.list.map((d,i)=>{const can=!MODE.ro&&canEditDefect(d);const pf=qcPass(d);const dis=can?'':'disabled';
+       const tx=(f,ph0)=>`<input type="text" data-qt="${f}:${d.id}" value="${esc(d[f]||'')}" ${ph0?`placeholder="${ph0}"`:''} ${dis}>`;
+       const dt=f=>`<input type="date" data-qt="${f}:${d.id}" value="${esc(d[f]||'')}" ${dis}>`;
+       return`<tr data-row="${d.id}"><td><b>${i+1}</b><div class="mono small codec" data-act="qcopen" data-id="${d.id}" title="เปิดรายละเอียดเต็ม">${esc(d.code)}</div></td>
+       <td>${tx('area','ห้อง / พื้นที่')}</td><td class="dph">${ph(d,'before',can)}</td><td class="dph">${ph(d,'after',can)}</td>
+       <td><textarea data-qt="desc:${d.id}" rows="4" ${dis}>${esc(d.desc||'')}</textarea></td><td>${tx('scope')}</td><td>${dt('found')}</td><td>${dt('due')}</td>
+       <td class="c"><input type="checkbox" data-qpf="p:${d.id}" ${pf==='p'?'checked':''} ${dis}></td><td class="c"><input type="checkbox" data-qpf="f:${d.id}" ${pf==='f'?'checked':''} ${dis}></td>
+       <td>${tx('inspector')}</td><td>${tx('owner')}</td><td>${tx('note')}</td></tr>`}).join('')}</tbody></table></div>`;
+  }
+  return h;
+}
 /* ตารางบนหน้าจอ (เลื่อนซ้าย-ขวาได้) — แตะแถวเพื่อแก้ไข */
 function qcTableView(ds,act){act=act||'qcopen';
   let h='';
@@ -410,10 +430,16 @@ function qcInput(t){
   if(t.id==='qv'){UI.qv=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qg'){UI.qg=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qq'){UI.qq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewQC();const q=$('#qq');q.focus();q.setSelectionRange(p,p);return true}
+  if(t.dataset&&t.dataset.qt){if(MODE.ro)return true;const[f,id]=t.dataset.qt.split(':');const d=defectById(id);if(d&&canEditDefect(d)){d[f]=t.value;save()}return true}
   if(t.dataset&&t.dataset.sl){if(MODE.ro)return true;if(fileItems(t.dataset.sl).length){setFileMeta(t.dataset.sl,t.dataset.k,t.value);save()}return true}
   return false;
 }
 async function qcChange(t){
+  if(t.dataset&&t.dataset.qpf){if(MODE.ro)return true;const[k,id]=t.dataset.qpf.split(':');const d=defectById(id);if(!d||!canEditDefect(d))return true;
+    d.result=t.checked?k:'n';save();const tr=t.closest('tr');if(tr){tr.querySelectorAll('[data-qpf]').forEach(x=>{x.checked=!!t.checked&&x.dataset.qpf.split(':')[0]===k})}return true}
+  if(t.dataset&&t.dataset.qtph){const fs=[...t.files].filter(f=>f.type.startsWith('image/'));t.value='';if(MODE.ro||!fs.length)return true;const[st,id]=t.dataset.qtph.split(':');const d=defectById(id);if(!d||!canEditDefect(d))return true;
+    const y=window.scrollY;const sx=(t.closest('.qtw')||{}).scrollLeft||0;const ix=[...document.querySelectorAll('.qtw')].indexOf(t.closest('.qtw'));
+    toast(`กำลังเพิ่มรูป ${fs.length} รูป…`,30000);await addQCPhotos(d,st,fs);render();window.scrollTo(0,y);const w=document.querySelectorAll('.qtw')[ix];if(w)w.scrollLeft=sx;return true}
   if(t.id==='qccam'&&!MODE.ro){const fs=[...t.files];t.value='';if(!fs.length)return true;if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return true}
     try{const n=await Promise.resolve(allocNo('qc',1));const d=newQC(null,n);await addQCPhotos(d,'before',fs);render();editQC(d,{after:()=>render()})}catch(x){toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000)}
     return true}
@@ -461,6 +487,8 @@ async function qcChange(t){
 .qp{display:flex;flex-direction:column;gap:5px}.qp .thumb{background:var(--surface2);aspect-ratio:4/3;border-radius:6px;overflow:hidden;cursor:pointer}.qp .thumb svg{width:100%;height:100%;display:block}
 
 .qtw{overflow-x:auto;margin-bottom:14px;border:1px solid var(--line);border-radius:8px}
+.qtv.qte{min-width:1700px}.qte th:nth-child(2){min-width:110px}.qte th:nth-child(5){min-width:220px}.qte th:nth-child(6),.qte th:nth-child(11),.qte th:nth-child(12){min-width:120px}.qte th:nth-child(13){min-width:150px}.qte th:nth-child(7),.qte th:nth-child(8){min-width:135px}.qte tbody tr{cursor:default}.qte td{padding:4px}.qte input[type=text],.qte input[type=date],.qte textarea,.qte select{width:100%;min-height:0;padding:5px 6px;font-size:13px}.qte textarea{resize:vertical;min-height:92px}
+.qte .ph{display:flex;flex-direction:column;gap:4px;align-items:flex-start}.qte .ph .im{cursor:pointer;width:122px;height:92px}.qte .ph .row{gap:4px}.qte .ph .btn{padding:4px 8px;font-size:12px}.qte td.c input[type=checkbox]{width:20px;height:20px}.qte .codec{cursor:pointer}
 .qtv{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}
 .qtv th{background:var(--surface2);padding:7px 6px;font-size:12px;border:1px solid var(--line);white-space:nowrap}
 .qtv td{border:1px solid var(--line);padding:6px;vertical-align:top}.qtv tbody tr{cursor:pointer}.qtv tbody tr:hover{background:var(--surface2)}
