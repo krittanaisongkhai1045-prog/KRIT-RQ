@@ -24,7 +24,7 @@ function viewQC(){
   const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
-   ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF${UI.qv==='table'?' (ตาราง)':''}</button><button class="btn" data-act="qchtml">HTML${UI.qv==='table'?' (ตาราง)':''}</button></div>
+   ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="qcmulti" title="เลือกรูปหลายรูปพร้อมกัน แต่ละรูปสร้างเป็น 1 รายการ">🖼 เลือกรูปหลายรูป (1 รูป = 1 รายการ)</label><input id="qcmulti" type="file" accept="image/*" multiple hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF${UI.qv==='table'?' (ตาราง)':''}</button><button class="btn" data-act="qchtml">HTML${UI.qv==='table'?' (ตาราง)':''}</button></div>
    <p class="hint" style="margin:0 0 10px">ใช้บันทึกงานที่พบจากการตรวจ QC โดยไม่ต้องมีใบ Inspection: ถ่ายรูปก่อนแก้ → แก้ → ถ่ายรูปหลังแก้ → ปิด · ปักหมุดตำแหน่งบน “แบบหน้างาน” และระบุแผ่นกระเบื้องที่ต้องแก้ได้</p>
    <div class="stats"><div><b>${all.length}</b><span>ทั้งหมด</span></div><div><b style="color:var(--bad)">${cnt('open')}</b><span>ต้องแก้ไข</span></div><div><b style="color:var(--warn)">${cnt('fixed')}</b><span>แก้แล้ว รอตรวจซ้ำ</span></div><div><b style="color:var(--good)">${cnt('closed')}</b><span>ปิดแล้ว</span></div></div>
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
@@ -417,6 +417,13 @@ async function qcChange(t){
   if(t.id==='qccam'&&!MODE.ro){const fs=[...t.files];t.value='';if(!fs.length)return true;if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return true}
     try{const n=await Promise.resolve(allocNo('qc',1));const d=newQC(null,n);await addQCPhotos(d,'before',fs);render();editQC(d,{after:()=>render()})}catch(x){toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000)}
     return true}
+  if(t.id==='qcmulti'&&!MODE.ro){const fs=[...t.files].filter(f=>f.type.startsWith('image/'));t.value='';if(!fs.length)return true;if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return true}
+    let ok=0;
+    for(let i=0;i<fs.length;i++){
+      toast(`กำลังสร้าง QC DEFECT จากรูป ${i+1}/${fs.length}…`,60000);
+      try{const n=await Promise.resolve(allocNo('qc',1));const d=newQC(null,n);await addQCPhotos(d,'before',[fs[i]]);ok++}
+      catch(x){toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000);break}}
+    render();toast(`สร้าง QC DEFECT ${ok} รายการจากรูป ${fs.length} รูปแล้ว — แตะการ์ดเพื่อกรอกรายละเอียด (อาคาร/ชั้น/ห้อง คัดลอกจากรายการก่อนหน้าให้อัตโนมัติ)`,6000);return true}
   if(t.id==='sitefile'&&!MODE.ro){
     const files=[...t.files];t.value='';if(!files.length)return true;
     const byBase=new Map();let nPdf=0,nCad=0;
