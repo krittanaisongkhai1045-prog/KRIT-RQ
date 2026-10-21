@@ -8,7 +8,7 @@ const accReqs=()=>(S.access||[]).filter(a=>a.kind==='req');
 const accSnaps=()=>(S.access||[]).filter(a=>a.kind==='snap').sort((a,b)=>b.date.localeCompare(a.date));
 const accRoomsDoc=()=>(S.access||[]).find(a=>a.kind==='rooms');
 const accRoomList=()=>{const d=accRoomsDoc();return d&&d.list?d.list:[]};
-function accImageIds(){return(S.access||[]).flatMap(a=>[...(a.photos||[]).map(p=>p.imgId),a.imgId]).filter(Boolean)}
+function accImageIds(){return(S.access||[]).flatMap(a=>[...(a.photos||[]).map(p=>p.imgId),...(a.before||[]).map(p=>p.imgId),a.imgId]).filter(Boolean)}
 const accNowHM=()=>{const d=new Date();return pad2(d.getHours())+':'+pad2(d.getMinutes())};
 const accMin=t=>{if(!t)return null;const p=String(t).split(':').map(Number);return(p[0]||0)*60+(p[1]||0)};
 const accNowMin=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
@@ -108,9 +108,9 @@ function accPaint(){const el=$('#acclive');if(el)el.innerHTML=accLiveHTML(accDay
 function accNew(over){
   return Object.assign({id:'ac'+uid(),kind:'req',date:accDay(),from:accDay()===todayISO()?accNowHM():'',to:'',who:'',org:'',rooms:[],note:'',photos:[],status:'',done:false,created:Date.now(),by:MODE.email||''},over||{});
 }
-async function accAddPhotos(a,files){
-  let n=0;a.photos=a.photos||[];
-  for(const f of files){if(!f.type.startsWith('image/'))continue;try{const im=await fileToImage(f,1600,.82);const imgId=await putImage(im.url);a.photos.push({id:'ph'+uid(),imgId,w:im.w,h:im.h});n++}catch(e){toast('อ่านรูปไม่ได้: '+(f.name||''))}}
+async function accAddPhotos(a,files,field){
+  field=field||'photos';let n=0;a[field]=a[field]||[];
+  for(const f of files){if(!f.type.startsWith('image/'))continue;try{const im=await fileToImage(f,1600,.82);const imgId=await putImage(im.url);a[field].push({id:'ph'+uid(),imgId,w:im.w,h:im.h});n++}catch(e){toast('อ่านรูปไม่ได้: '+(f.name||''))}}
   return n;
 }
 function accEdit(a,isNew){
@@ -125,6 +125,9 @@ function accEdit(a,isNew){
     box.innerHTML=`<div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">${isNew?'บันทึกคำขอเข้าห้อง':'คำขอเข้าห้อง'} ${isNew?'':chip(ACC_ST[st][0],ACC_ST[st][1])}</h3><button class="btn pri" data-a="close">${isNew?'ยกเลิก':'เสร็จ'}</button></div>
      <div class="accphotos">${(a.photos||[]).map(p=>`<div class="qp"><div class="thumb" data-a="photo" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,[],[])}</div>${ro?'':`<button class="btn sm bad" data-a="delp" data-id="${p.id}">ลบรูป</button>`}</div>`).join('')}
       ${ro?'':`<div class="qp"><label class="btn" for="ac-cam">📷 ถ่ายเอกสาร</label><input id="ac-cam" data-accph="1" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="ac-up">🖼 เลือกรูป (หลายรูป)</label><input id="ac-up" data-accph="1" type="file" accept="image/*" multiple hidden></div>`}</div>
+     <div class="f" style="margin-top:12px"><b class="small">📸 รูป BEFORE ก่อนเข้าห้อง (${(a.before||[]).length})</b>
+      <div class="accphotos">${(a.before||[]).map(p=>`<div class="qp"><div class="thumb" data-a="photo" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,[],[])}</div>${ro?'':`<button class="btn sm bad" data-a="delb" data-id="${p.id}">ลบรูป</button>`}</div>`).join('')}
+      ${ro?'':`<div class="qp"><label class="btn" for="ac-bcam">📷 ถ่าย Before</label><input id="ac-bcam" data-accph="before" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="ac-bup">🖼 เลือกรูป (หลายรูป)</label><input id="ac-bup" data-accph="before" type="file" accept="image/*" multiple hidden></div>`}</div></div>
      <div class="grid" style="margin-top:10px">
       <label class="f">ผู้ขอเข้า<input type="text" data-af="who" value="${esc(a.who||'')}" ${ro?'disabled':''} placeholder="ชื่อ-นามสกุล"></label>
       <label class="f">หน่วยงาน / บริษัท / ทีม<input type="text" data-af="org" value="${esc(a.org||'')}" ${ro?'disabled':''}></label>
@@ -144,15 +147,16 @@ function accEdit(a,isNew){
     if(t.id==='ac-q'){q=t.value;const p=t.selectionStart;draw();const n=$('#ac-q',o);n.focus();n.setSelectionRange(p,p);return}
     if(t.dataset.af){a[t.dataset.af]=t.value}});
   o.addEventListener('change',async e=>{const t=e.target;if(ro)return;
-    if(t.dataset.accph){const fs=[...t.files];t.value='';if(fs.length){toast('กำลังเพิ่มรูป…',20000);await accAddPhotos(a,fs);draw();if(!isNew)accSave(a,false)}return}
+    if(t.dataset.accph){const fs=[...t.files];t.value='';if(fs.length){toast('กำลังเพิ่มรูป…',20000);await accAddPhotos(a,fs,t.dataset.accph==='before'?'before':'photos');draw();if(!isNew)accSave(a,false)}return}
     if(t.dataset.af==='date'){draw()}});
   o.addEventListener('click',e=>{
     if(e.target===o){if(isNew){o.remove()}else finish();return}
     const b=e.target.closest('[data-a]');if(!b)return;const k=b.dataset.a;
     if(k==='close'){if(isNew){o.remove()}else{if(!ro)accSave(a,false);finish()}return}
-    if(k==='photo'){const p=(a.photos||[]).find(x=>x.id===b.dataset.id);if(p)openBoard({kind:'photo',ro:true,title:'เอกสารขอเข้าห้อง',imgUrl:imgSrc(p.imgId),w:p.w,h:p.h,shapes:[],onChange:()=>{},onClose:()=>{}});return}
+    if(k==='photo'){const p=[...(a.photos||[]),...(a.before||[])].find(x=>x.id===b.dataset.id);if(p)openBoard({kind:'photo',ro:true,title:'เอกสารขอเข้าห้อง',imgUrl:imgSrc(p.imgId),w:p.w,h:p.h,shapes:[],onChange:()=>{},onClose:()=>{}});return}
     if(k==='out'&&perm&&!isNew){a.to=accNowHM();a.done=true;accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
     if(ro)return;
+    if(k==='delb'){a.before=(a.before||[]).filter(x=>x.id!==b.dataset.id);draw();return}
     if(k==='delp'){a.photos=a.photos.filter(x=>x.id!==b.dataset.id);draw();return}
     if(k==='room'){const i=(a.rooms||[]).indexOf(b.dataset.id);a.rooms=a.rooms||[];if(i>=0)a.rooms.splice(i,1);else a.rooms.push(b.dataset.id);b.classList.toggle('on');const h=$('.f b.small',box);if(h)h.textContent=`ห้องที่ขอเข้า (${a.rooms.length})`;return}
     if(k==='save'){if(!(a.who||'').trim()&&!(a.photos||[]).length){toast('ใส่ชื่อผู้ขอ หรือถ่ายรูปเอกสารอย่างน้อย 1 อย่าง');return}
@@ -255,7 +259,7 @@ function accInput(t){
 }
 async function accChange(t){
   if(t.id==='acccam'&&!MODE.ro){const fs=[...t.files];t.value='';if(!fs.length)return true;if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return true}
-    const a=accNew();toast('กำลังเพิ่มรูป…',20000);await accAddPhotos(a,fs);accEdit(a,true);return true}
+    const a=accNew();toast('กำลังเพิ่มรูป…',20000);await accAddPhotos(a,fs,t.dataset.accph==='before'?'before':'photos');accEdit(a,true);return true}
   if(t.id==='accd'){UI.accDate=t.value&&t.value!==todayISO()?t.value:null;accPaintAll();return true}
   return false;
 }

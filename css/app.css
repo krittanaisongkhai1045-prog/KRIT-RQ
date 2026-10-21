@@ -332,3 +332,6 @@ body::before{content:"";position:fixed;left:0;right:0;top:0;height:340px;z-index
 .plxbd .thumb{background:var(--surface2);aspect-ratio:4/3;border-radius:12px;overflow:hidden;cursor:pointer}.plxbd .thumb svg{width:100%;height:100%;display:block}
 .plxbd .body{display:flex;flex-direction:column;gap:8px;min-width:0}
 @media(max-width:640px){.plxbd{grid-template-columns:1fr}}
+
+.clbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.clbar input[type=search]{flex:1 1 100%}.clbar select{flex:1 1 130px;min-width:0}.clbar .seg{display:flex;gap:4px}
+.qtv.clt{min-width:960px}.qtv.clt td.dph{width:170px}.qtv.clt .dl-im{width:160px;height:96px}.qtv.clt .dl-im svg{width:100%;height:100%}

@@ -24,6 +24,7 @@ function onMainClick(e){
   const act=a.dataset.act,id=a.dataset.id;const r=UI.route==='req'?curReq():null;
   if(QCACT[act]){QCACT[act](a,id,e);return}
   if(ACCACT[act]){ACCACT[act](a,id,e);return}
+  if(CLACT[act]){CLACT[act](a,id,e);return}
   if(MODE.ro&&!['openreq','openplan','openphoto','editdef','pdf','html'].includes(act))return;
   switch(act){
   case'newopen':{if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');break}
@@ -85,6 +86,7 @@ function onMainInput(e){
   const t=e.target;
   if(qcInput(t))return;
   if(accInput(t))return;
+  if(clInput(t))return;
   if(t.id==='grp'){UI.grp=t.value;try{localStorage.setItem('grp',t.value)}catch(x){}$('#main').innerHTML=viewList();return}
   if(MODE.ro&&!['q','dq','dfilter','dgroup','dview'].includes(t.id))return;
   if(t.id==='q'){UI.q=t.value;const p=t.selectionStart;$('#main').innerHTML=viewList();const q=$('#q');q.focus();q.setSelectionRange(p,p);return}
@@ -118,7 +120,8 @@ function onMainInput(e){
 async function onMainChange(e){
   const t=e.target;
   if(await qcChange(t))return;
-  if(await accChange(t))return;const r=UI.route==='req'?curReq():null;
+  if(await accChange(t))return;
+  if(await clChange(t))return;const r=UI.route==='req'?curReq():null;
   if(MODE.ro)return;
   if(t.dataset.dcard&&r){const fs=[...t.files];t.value='';if(fs.length&&canEditReq(r)){await addPhotoFiles(r,fs,t.dataset.dcard,t.dataset.stage)}return}
   if(t.id==='defcam'&&r){const fs=[...t.files];t.value='';await quickDefect(r,fs);return}

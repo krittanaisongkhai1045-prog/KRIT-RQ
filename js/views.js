@@ -25,6 +25,7 @@ function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(
 const TABIC={
  list:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4.5h6M8.5 12.5l2.2 2.2 4.3-4.6"/></svg>',
  defects:'<svg viewBox="0 0 24 24"><path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17.4v.1"/></svg>',
+ claim:'<svg viewBox="0 0 24 24"><path d="M7 3.500h8l4 4v13H7z"/><path d="M15 3.500v4h4M10 12h6M10 16h6"/></svg>',
  access:'<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="10" height="17" rx="1.5"/><path d="M15 6l4 1.500v11L15 20.500"/><circle cx="12" cy="12" r=".9"/></svg>',
  qc:'<svg viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1.3-2h6l1.3 2h1.2A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>',
  site:'<svg viewBox="0 0 24 24"><path d="M3.5 7.5L9 5l6 2.5L20.5 5v11.5L15 19l-6-2.5-5.500 2.500z"/><path d="M9 5v11.500M15 7.500V19"/></svg>',
@@ -33,13 +34,14 @@ function render(){
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
-   <nav class="nav">${[['list','รายการส่งตรวจ','ส่งตรวจ'],['defects','DEFECT ตามใบตรวจ','DEFECT'],['qc','QC Before/After','QC'],['access','ขอเข้าห้อง','ขอเข้าห้อง'],['site','แบบหน้างาน','แบบ'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล','ตั้งค่า']].map(n=>`<button data-go="${n[0]}" aria-label="${n[1]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}"><i class="ic">${TABIC[n[0]]}</i><span class="lb l">${n[1]}</span><span class="lb s">${n[2]}</span></button>`).join('')}</nav>
+   <nav class="nav">${[['list','รายการส่งตรวจ','ส่งตรวจ'],['defects','DEFECT ตามใบตรวจ','DEFECT'],['qc','QC Before/After','QC'],['access','ขอเข้าห้อง','ขอเข้าห้อง'],['claim','งานเคลม','เคลม'],['site','แบบหน้างาน','แบบ'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล','ตั้งค่า']].map(n=>`<button data-go="${n[0]}" aria-label="${n[1]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}"><i class="ic">${TABIC[n[0]]}</i><span class="lb l">${n[1]}</span><span class="lb s">${n[2]}</span></button>`).join('')}</nav>
    ${MODE.kind==='cloud'&&MODE.uid?`<button class="btn sm ${MODE.siteMode?'pri':''}" data-act="sitemode">${MODE.siteMode?'● โหมดหน้างาน':'เข้าหน้างาน'}</button>`:''}${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
   const m=$('#main');
   if(UI.route==='list')m.innerHTML=viewList();
   else if(UI.route==='defects')m.innerHTML=viewDefects();
   else if(UI.route==='qc')m.innerHTML=viewQC();
   else if(UI.route==='access')m.innerHTML=viewAccess();
+  else if(UI.route==='claim')m.innerHTML=viewClaim();
   else if(UI.route==='site')m.innerHTML=viewSite();
   else if(UI.route==='settings'){m.innerHTML=viewSettings();showUsage()}
   else if(UI.route==='req'){if(!curReq()){UI.route='list';return render()}m.innerHTML=viewReq();afterReq()}
