@@ -33,7 +33,7 @@ const canEditPlan=l=>canEditKey('plans',l.id);
 const docKey=d=>d.qc?['defects',d.id]:['requests',d.rootId];
 const canEditDefect=d=>canEditKey(...docKey(d));
 const canCreate=()=>MODE.kind!=='cloud'||(!!MODE.uid&&MODE.ready);
-const grpOf=(c,o)=>c==='requests'?(o.rootId||o.id):c==='defects'?(o.qc?o.id:(o.rootId||o.id)):c==='plans'?(o.fileId||o.id):'';
+const grpOf=(c,o)=>c==='requests'?(o.rootId||o.id):c==='defects'?(o.qc?o.id:(o.rootId||o.id)):c==='plans'?(o.fileId||o.id):c==='access'?o.id:'';
 async function allocNo(kind,start){
   if(MODE.kind!=='cloud')return null;
   if(MODE.offline){toast('ออฟไลน์: ใช้เลขที่ชั่วคราวจากเครื่อง อาจซ้ำกับคนอื่น ตรวจเลขหลังซิงก์',6000);return null}
@@ -63,7 +63,7 @@ function save(){if(MODE.kind==='cloud'?!MODE.uid:MODE.ro)return;clearTimeout(sav
 let stashT=null;
 function flushNow(){if(MODE.kind==='cloud'&&MODE.uid){clearTimeout(saveT);try{stashDirty(docsOf())}catch(e){}cloudFlush()}else if(MODE.kind!=='cloud'&&!MODE.ro){clearTimeout(saveT);saveNow()}}
 if(typeof window!=='undefined'){window.addEventListener('pagehide',flushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushNow();if(MODE.kind==='cloud'&&MODE.uid)setTimeout(()=>refreshCache(true),1500)}})}
-function docsOf(){const m=new Map();m.set('meta/project',S.project);S.library.forEach(l=>m.set('plans/'+l.id,l));S.requests.forEach(r=>m.set('requests/'+r.id,r));S.defects.forEach(d=>m.set('defects/'+d.id,d));return m}
+function docsOf(){const m=new Map();m.set('meta/project',S.project);S.library.forEach(l=>m.set('plans/'+l.id,l));S.requests.forEach(r=>m.set('requests/'+r.id,r));S.defects.forEach(d=>m.set('defects/'+d.id,d));(S.access||[]).forEach(a=>m.set('access/'+a.id,a));return m}
 const splitKey=k=>{const i=k.indexOf('/');return[k.slice(0,i),k.slice(i+1)]};
 const isDenied=e=>e&&(e.code==='42501'||/row-level security|permission denied|not authorized|no permission|login required|only owner|admin only/i.test((e.message||'')));
 function cloudError(e){
@@ -128,7 +128,7 @@ async function gcImages(){
   for(const k of [...IMG.keys()]){if(!used.has(k)){IMG.delete(k);tx.objectStore('img').delete(k)}}
 }
 /* ----- cloud: load / live updates / auth ----- */
-function fillState(p,lib,rq,df){S={project:p||defaultProject(),library:lib||[],requests:rq||[],defects:df||[]}}
+function fillState(p,lib,rq,df,ac){S={project:p||defaultProject(),library:lib||[],requests:rq||[],defects:df||[],access:ac||[]}}
 /* Supabase ตอบกลับสูงสุด 1,000 แถวต่อครั้ง (ตั้งโดยเซิร์ฟเวอร์) ต้องดึงทีละหน้าและเรียงลำดับให้คงที่ ไม่งั้นแถวใหม่ๆ จะถูกตัดทิ้งเงียบๆ เมื่อเอกสารเกิน 1,000 */
 async function fetchAllDocs(){
   const cols='collection,id,data,'+ACLCOLS.replace('collection,id,','');const out=[];
@@ -143,12 +143,12 @@ async function loadCloud(){
   return applyRows(data);
 }
 function applyRows(data){
-  const by={project:null,library:[],requests:[],defects:[]};MODE.acl.clear();MODE.snap.clear();
+  const by={project:null,library:[],requests:[],defects:[],access:[]};MODE.acl.clear();MODE.snap.clear();
   for(const r of data){MODE.acl.set(r.collection+'/'+r.id,{collection:r.collection,id:r.id,grp:r.grp,owner_id:r.owner_id,owner_email:r.owner_email,access:r.access,readers:r.readers||[],editors:r.editors||[]});
-    if(r.collection==='meta'&&r.id==='project')by.project=r.data;else if(r.collection==='plans')by.library.push(r.data);else if(r.collection==='requests')by.requests.push(r.data);else if(r.collection==='defects')by.defects.push(r.data)}
+    if(r.collection==='meta'&&r.id==='project')by.project=r.data;else if(r.collection==='plans')by.library.push(r.data);else if(r.collection==='requests')by.requests.push(r.data);else if(r.collection==='defects')by.defects.push(r.data);else if(r.collection==='access')by.access.push(r.data)}
   by.library.sort((a,b)=>(a.created||0)-(b.created||0));
   if(!by.project){fillState();return false}
-  fillState(by.project,by.library,by.requests,by.defects);
+  fillState(by.project,by.library,by.requests,by.defects,by.access);
   docsOf().forEach((o,k)=>MODE.snap.set(k,JSON.stringify(o)));
   return true;
 }
@@ -167,11 +167,12 @@ function flushDefer(){
 function applyRemoteNow(ev,n,o){
   const row=ev==='DELETE'?o:n;if(!row||!row.collection)return;const key=row.collection+'/'+row.id;
   const put=(arr,obj)=>{const i=arr.findIndex(x=>x.id===obj.id);i>=0?arr[i]=obj:arr.push(obj)};
-  const arrOf=c=>c==='requests'?S.requests:c==='defects'?S.defects:c==='plans'?S.library:null;
+  const arrOf=c=>c==='requests'?S.requests:c==='defects'?S.defects:c==='plans'?S.library:c==='access'?(S.access=S.access||[]):null;
   if(ev==='DELETE'){MODE.snap.delete(key);MODE.acl.delete(key);
     if(row.collection==='requests')S.requests=S.requests.filter(x=>x.id!==row.id);
     else if(row.collection==='defects')S.defects=S.defects.filter(x=>x.id!==row.id);
     else if(row.collection==='plans')S.library=S.library.filter(x=>x.id!==row.id);
+    else if(row.collection==='access')S.access=(S.access||[]).filter(x=>x.id!==row.id);
   }else{
     MODE.acl.set(key,{collection:n.collection,id:n.id,grp:n.grp,owner_id:n.owner_id,owner_email:n.owner_email,access:n.access,readers:n.readers||[],editors:n.editors||[]});
     const str=JSON.stringify(n.data);if(MODE.snap.get(key)===str)return;
@@ -257,7 +258,7 @@ async function initStorage(){
   }
   await loadAll();
   if(!S){await seedDemo();await saveNow()}
-  else{S.library=S.library||[];S.defects=S.defects||[];S.requests=S.requests||[]}
+  else{S.library=S.library||[];S.defects=S.defects||[];S.requests=S.requests||[];S.access=S.access||[]}
 }
 
 /* ===== สัญญาณอ่อน / ออฟไลน์: คิวส่งรูป + เก็บงานที่ยังไม่ส่งไว้ในเครื่อง + ลองใหม่อัตโนมัติ ===== */
@@ -322,7 +323,7 @@ async function restoreOutbox(){
   const ds=await obAll('docs');if(!ds.length||!MODE.uid||!MODE.ready)return;
   let n=0;
   for(const[k,v]of ds){const{c,id,data}=v||{};if(!c||!data)continue;if(c==='meta'||!canEditKey(c,id))continue;
-    const arr=c==='requests'?S.requests:c==='defects'?S.defects:c==='plans'?S.library:null;if(!arr)continue;
+    const arr=c==='requests'?S.requests:c==='defects'?S.defects:c==='plans'?S.library:c==='access'?(S.access=S.access||[]):null;if(!arr)continue;
     const i=arr.findIndex(x=>x.id===id);if(i>=0)arr[i]=data;else arr.push(data);n++}
   if(n){toast(`กู้งานที่ยังไม่ได้ส่งคืนมา ${n} รายการ กำลังส่งขึ้นระบบ…`,5000);save()}
 }

@@ -3,7 +3,7 @@
    - แบบหน้างานใช้คลังแบบ S.library  (ฟิลด์เพิ่ม: rev, date, group, shapes) */
 const QC_ST={open:['ต้องแก้ไข','bad'],fixed:['แก้แล้ว รอตรวจซ้ำ','warn'],closed:['ผ่าน QC ปิดแล้ว','good']};
 const qcList=()=>S.defects.filter(d=>d.qc);
-const qcImageIds=()=>qcList().flatMap(d=>[...(d.before||[]),...(d.after||[])].map(p=>p.imgId));
+const qcImageIds=()=>[...qcList().flatMap(d=>[...(d.before||[]),...(d.after||[])].map(p=>p.imgId)),...(typeof accImageIds==='function'?accImageIds():[])];
 function qcNext(){const n=qcList().reduce((m,d)=>Math.max(m,d.num||0),0)+1;return{num:n,code:'QC-'+String(n).padStart(3,'0')}}
 function newQC(loc,num0){
   const n=num0!=null?{num:num0,code:'QC-'+String(num0).padStart(3,'0')}:qcNext();

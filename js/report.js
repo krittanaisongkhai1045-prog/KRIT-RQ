@@ -238,7 +238,7 @@ function samplePhoto(k){return canvasUrl(1200,900,(x,w,h)=>{
   if(k===2){x.fillStyle='rgba(0,0,0,.12)';x.fillRect(0,h-120,w,120)}
   },.8)}
 async function seedDemo(){
-  S={project:defaultProject(),requests:[],defects:[],library:[]};const cloud=MODE.kind==='cloud';
+  S={project:defaultProject(),requests:[],defects:[],library:[],access:[]};const cloud=MODE.kind==='cloud';
   S.project.logoId='logo';S.project.sigId='sig';
   const planId=await putImage(samplePlan());const lib={id:'lb'+uid(),name:'ผัง BUILDING E ชั้น 1 (ตัวอย่าง)',imgId:planId,w:1600,h:1000};S.library.push(lib);
   const id='rq'+uid();const r={id,rootId:id,type:'OPEN',round:0,num:359,no:'MOD-Inspection-AR-359',date:'2026-10-12',planDate:'2026-10-12',planTime:'10.30 AM.',bookNo:'',

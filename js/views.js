@@ -25,6 +25,7 @@ function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(
 const TABIC={
  list:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4.5h6M8.5 12.5l2.2 2.2 4.3-4.6"/></svg>',
  defects:'<svg viewBox="0 0 24 24"><path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17.4v.1"/></svg>',
+ access:'<svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="10" height="17" rx="1.5"/><path d="M15 6l4 1.500v11L15 20.500"/><circle cx="12" cy="12" r=".9"/></svg>',
  qc:'<svg viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1.3-2h6l1.3 2h1.2A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>',
  site:'<svg viewBox="0 0 24 24"><path d="M3.5 7.5L9 5l6 2.5L20.5 5v11.5L15 19l-6-2.5-5.500 2.500z"/><path d="M9 5v11.500M15 7.500V19"/></svg>',
  settings:'<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>'};
@@ -32,12 +33,13 @@ function render(){
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
-   <nav class="nav">${[['list','รายการส่งตรวจ','ส่งตรวจ'],['defects','DEFECT ตามใบตรวจ','DEFECT'],['qc','QC Before/After','QC'],['site','แบบหน้างาน','แบบ'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล','ตั้งค่า']].map(n=>`<button data-go="${n[0]}" aria-label="${n[1]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}"><i class="ic">${TABIC[n[0]]}</i><span class="lb l">${n[1]}</span><span class="lb s">${n[2]}</span></button>`).join('')}</nav>
+   <nav class="nav">${[['list','รายการส่งตรวจ','ส่งตรวจ'],['defects','DEFECT ตามใบตรวจ','DEFECT'],['qc','QC Before/After','QC'],['access','ขอเข้าห้อง','ขอเข้าห้อง'],['site','แบบหน้างาน','แบบ'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล','ตั้งค่า']].map(n=>`<button data-go="${n[0]}" aria-label="${n[1]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}"><i class="ic">${TABIC[n[0]]}</i><span class="lb l">${n[1]}</span><span class="lb s">${n[2]}</span></button>`).join('')}</nav>
    ${MODE.kind==='cloud'&&MODE.uid?`<button class="btn sm ${MODE.siteMode?'pri':''}" data-act="sitemode">${MODE.siteMode?'● โหมดหน้างาน':'เข้าหน้างาน'}</button>`:''}${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
   const m=$('#main');
   if(UI.route==='list')m.innerHTML=viewList();
   else if(UI.route==='defects')m.innerHTML=viewDefects();
   else if(UI.route==='qc')m.innerHTML=viewQC();
+  else if(UI.route==='access')m.innerHTML=viewAccess();
   else if(UI.route==='site')m.innerHTML=viewSite();
   else if(UI.route==='settings'){m.innerHTML=viewSettings();showUsage()}
   else if(UI.route==='req'){if(!curReq()){UI.route='list';return render()}m.innerHTML=viewReq();afterReq()}
@@ -351,13 +353,18 @@ function openCover(r){
 function tabPlans(r){
   let h=coverSection(r)+`<div class="row" style="margin-bottom:10px"><h3 style="font-size:15px;margin-right:12px">แบบที่แนบท้ายเอกสาร</h3><button class="btn pri" data-act="addplan">＋ เพิ่มแบบ (เลือกจากคลังหรืออัปโหลด)</button><span class="hint" style="margin:0">เรียงตามชื่อแบบอัตโนมัติ (E101, E102, …) · เปิดแบบเพื่อวาดโซนสีขอบเขตที่ส่งตรวจ${defectsOn(r)?' และปักหมุดตำแหน่ง DEFECT':''}</span></div>`;
   if(!r.plans.length)return h+`<div class="empty">ยังไม่มีแบบในใบนี้<br>อัปโหลดแบบผัง (รูปหรือ PDF) หรือวางรูป (Ctrl+V) ที่แคปมาจากแบบ แล้ววาดโซนสีบนแบบได้เลย</div>`;
-  h+=`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">`;
-  for(const pl of plansSorted(r)){
+  UI.planOpen=UI.planOpen||{};const list=plansSorted(r);const nOpen=list.filter(p=>UI.planOpen[p.id]).length;
+  h+=`<div class="row" style="margin:0 0 8px"><span class="small muted" style="margin-right:auto">${list.length} แบบ · แตะชื่อแบบเพื่อย่อ/ขยาย</span><button class="btn sm" data-act="planall" data-id="${nOpen<list.length?'1':'0'}">${nOpen<list.length?'ขยายทั้งหมด':'ย่อทั้งหมด'}</button></div><div class="plxl">`;
+  for(const pl of list){
+    const open=!!UI.planOpen[pl.id];
     const legend=[...new Map((pl.shapes||[]).filter(s=>s.t==='poly'&&s.label).map(s=>[s.c+s.label,s])).values()];
-    h+=`<div class="card"><div class="thumb" data-act="openplan" data-id="${pl.id}">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,planPins(r,pl),{scale:pl.sym})}</div><div class="body">
+    const pins=planPins(r,pl).length,zones=(pl.shapes||[]).filter(s=>s.t==='poly'&&!s.ref).length;
+    h+=`<div class="plx ${open?'open':''}"><div class="plxh" data-act="plantog" data-id="${pl.id}" role="button" tabindex="0" aria-expanded="${open}"><span class="chev">▸</span><b class="plxn">${esc(pl.name)}</b><span class="plxb">${zones?`<span class="chip">โซน ${zones}</span>`:''}${pins?`<span class="chip bad">หมุด ${pins}</span>`:''}</span></div>`;
+    if(open)h+=`<div class="plxbd"><div class="thumb" data-act="openplan" data-id="${pl.id}">${annotatedSvg(imgSrc(pl.imgId),pl.w,pl.h,pl.shapes,planPins(r,pl),{scale:pl.sym})}</div><div class="body">
      <input type="text" data-plan="${pl.id}" data-k="name" value="${esc(pl.name)}" aria-label="ชื่อแบบ">
      <div class="small muted">${legend.length?legend.map(s=>`<span class="dot" style="background:${s.c}"></span> ${esc(s.label)}`).join(' &nbsp; '):'ยังไม่มีโซนสี'}</div>
-     <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">${defectsOn(r)?'ทำสี / ปักหมุด':'ทำสี / ระบุขอบเขต'}</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`}
+     <div class="row"><button class="btn pri sm" data-act="openplan" data-id="${pl.id}">${defectsOn(r)?'ทำสี / ปักหมุด':'ทำสี / ระบุขอบเขต'}</button><button class="btn sm bad" data-act="delplan" data-id="${pl.id}">ลบ</button></div></div></div>`;
+    h+=`</div>`}
   return h+`</div>`;
 }
 /* นำเข้าไฟล์แบบ: 1 ไฟล์ = 1 fileId (PDF หลายหน้า = หลายรายการที่ fileId เดียวกัน)

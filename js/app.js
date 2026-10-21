@@ -23,6 +23,7 @@ function onMainClick(e){
   const a=e.target.closest('[data-act]');if(!a)return;
   const act=a.dataset.act,id=a.dataset.id;const r=UI.route==='req'?curReq():null;
   if(QCACT[act]){QCACT[act](a,id,e);return}
+  if(ACCACT[act]){ACCACT[act](a,id,e);return}
   if(MODE.ro&&!['openreq','openplan','openphoto','editdef','pdf','html'].includes(act))return;
   switch(act){
   case'newopen':{if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');break}
@@ -45,6 +46,8 @@ function onMainClick(e){
     if(nx&&(col==='r1'||col==='r2')){const dc=col==='r1'?'d1':'d2';if(!c[dc])c[dc]=fmtDate(r.date)}save();refreshTab();break}
   case'autoresult':autoResult(r);refreshTab();toast('สรุปผลจาก DEFECT แล้ว');break;
   case'addplan':planPicker(r);break;
+  case'plantog':{UI.planOpen=UI.planOpen||{};UI.planOpen[id]=!UI.planOpen[id];refreshTab();break}
+  case'planall':{UI.planOpen=UI.planOpen||{};const on=id==='1';r.plans.forEach(p=>UI.planOpen[p.id]=on);refreshTab();break}
   case'openplan':openPlan(r,r.plans.find(p=>p.id===id));break;
   case'delplan':{const pl=r.plans.find(p=>p.id===id);if(!pl)break;
     const rid=rootId(r);const rest=r.plans.filter(p=>p.id!==id);
@@ -81,6 +84,7 @@ function onMainClick(e){
 function onMainInput(e){
   const t=e.target;
   if(qcInput(t))return;
+  if(accInput(t))return;
   if(t.id==='grp'){UI.grp=t.value;try{localStorage.setItem('grp',t.value)}catch(x){}$('#main').innerHTML=viewList();return}
   if(MODE.ro&&!['q','dq','dfilter','dgroup','dview'].includes(t.id))return;
   if(t.id==='q'){UI.q=t.value;const p=t.selectionStart;$('#main').innerHTML=viewList();const q=$('#q');q.focus();q.setSelectionRange(p,p);return}
@@ -113,7 +117,8 @@ function onMainInput(e){
 }
 async function onMainChange(e){
   const t=e.target;
-  if(await qcChange(t))return;const r=UI.route==='req'?curReq():null;
+  if(await qcChange(t))return;
+  if(await accChange(t))return;const r=UI.route==='req'?curReq():null;
   if(MODE.ro)return;
   if(t.dataset.dcard&&r){const fs=[...t.files];t.value='';if(fs.length&&canEditReq(r)){await addPhotoFiles(r,fs,t.dataset.dcard,t.dataset.stage)}return}
   if(t.id==='defcam'&&r){const fs=[...t.files];t.value='';await quickDefect(r,fs);return}
@@ -133,12 +138,12 @@ async function doBackup(){
 async function wipeAll(){
   const keepL=S.project.logoId,keepS=S.project.sigId;
   if(MODE.kind==='cloud'){
-    S={project:defaultProject(),requests:[],defects:[],library:[]};S.project.nextNo=1;S.project.logoId=keepL;S.project.sigId=keepS;await cloudFlush();
+    S={project:defaultProject(),requests:[],defects:[],library:[],access:[]};S.project.nextNo=1;S.project.logoId=keepL;S.project.sigId=keepS;await cloudFlush();
     try{const l=await MODE.sb.storage.from(BUCKET).list('',{limit:1000});const names=(l.data||[]).map(x=>x.name);if(names.length)await MODE.sb.storage.from(BUCKET).remove(names)}catch(e){}
     IMGDATA.clear();UI.route='list';return}
   if(IDBH){await new Promise(res=>{const tx=IDBH.transaction(['kv','img'],'readwrite');tx.objectStore('kv').clear();tx.objectStore('img').clear();tx.oncomplete=res;tx.onerror=res})}
   IMG.clear();IMGDATA.clear();
-  S={project:defaultProject(),requests:[],defects:[],library:[]};S.project.nextNo=1;S.project.logoId=keepL;S.project.sigId=keepS;await saveNow();UI.route='list';
+  S={project:defaultProject(),requests:[],defects:[],library:[],access:[]};S.project.nextNo=1;S.project.logoId=keepL;S.project.sigId=keepS;await saveNow();UI.route='list';
 }
 async function doRestore(file){
   try{const j=JSON.parse(await file.text());if(!j.state||!j.state.project)throw new Error('ไฟล์ไม่ถูกต้อง');
@@ -146,7 +151,7 @@ async function doRestore(file){
     if(MODE.kind!=='cloud'&&IDBH)await new Promise(res=>{const tx=IDBH.transaction('img','readwrite');tx.objectStore('img').clear();tx.oncomplete=res;tx.onerror=res});
     IMG.clear();IMGDATA.clear();
     for(const[k,v]of Object.entries(j.images||{})){if(k==='logo'||k==='sig'){IMGDATA.set(k,v);continue}await putImage(v,k)}
-    S=j.state;S.library=S.library||[];S.defects=S.defects||[];S.requests=S.requests||[];
+    S=j.state;S.library=S.library||[];S.defects=S.defects||[];S.requests=S.requests||[];S.access=S.access||[];
     await saveNow();UI.route='list';render();toast('กู้ข้อมูลแล้ว')}
   catch(e){toast('กู้ข้อมูลไม่สำเร็จ: '+(e.message||e),4500)}
 }
