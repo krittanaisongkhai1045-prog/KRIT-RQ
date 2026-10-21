@@ -13,28 +13,49 @@ function newQC(loc,num0){
 }
 const libById=id=>S.library.find(l=>l.id===id);
 const qcThumb=p=>p?annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[]):'';
+/* ประเภทงานของ DEFECT → ไอคอน (จับจากคำใน Scope งาน / ประเภท) */
+const QCI=p=>`<svg viewBox="0 0 24 24">${p}</svg>`;
+const QC_CATS=[
+ ['กระเบื้อง|tile|ยาแนว|ปูพื้น|ปูผนัง',QCI('<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>')],
+ ['สี|ทาสี|paint|เคลือบ|อะคริลิก',QCI('<rect x="4" y="4" width="14" height="6" rx="1.5"/><path d="M18 7h2v5h-7v3"/><rect x="11" y="15" width="4" height="6" rx="1"/>')],
+ ['ฝ้า|เพดาน|ceiling|ยิปซั่ม',QCI('<path d="M3 6h18M3 11h18"/><path d="M7 11v4M12 11v6M17 11v4"/>')],
+ ['ประตู|หน้าต่าง|door|window|อลูมิเนียม|กระจก',QCI('<rect x="6" y="3.500" width="12" height="17" rx="1.500"/><circle cx="15" cy="12.500" r=".900"/>')],
+ ['สุขภัณฑ์|ห้องน้ำ|ประปา|ท่อ|plumb|sanitary|สุขา',QCI('<path d="M12 3.500c3 4 5 6.500 5 9a5 5 0 0 1-10 0c0-2.500 2-5 5-9z"/>')],
+ ['ไฟ|electric|สวิตช์|ปลั๊ก|โคม',QCI('<path d="M13 3L5 13.500h6L10 21l8-10.500h-6z"/>')],
+ ['พื้น|floor|ปูน|คอนกรีต|ปรับระดับ|สระ',QCI('<path d="M3 17l9-5 9 5-9 5z"/><path d="M3 12l9-5 9 5"/>')],
+ ['ผนัง|wall|ก่อ|ฉาบ|อิฐ',QCI('<rect x="3.500" y="4" width="17" height="16" rx="1"/><path d="M3.500 9.500h17M3.500 14.500h17M9 4v5.500M15 9.500v5M9 14.500V20"/>')],
+ ['เหล็ก|กันตก|ราว|steel|เชื่อม',QCI('<path d="M5 20V8M12 20V8M19 20V8M3 8h18M3 14h18"/>')]];
+const QC_OTHER=QCI('<circle cx="6" cy="12" r="1.800"/><circle cx="12" cy="12" r="1.800"/><circle cx="18" cy="12" r="1.800"/>');
+const qcWork=d=>(d.scope||d.type||'').trim()||'ไม่ระบุงาน';
+function qcCatIcon(name){const n=String(name).toLowerCase();for(const[k,ic]of QC_CATS)if(new RegExp(k,'i').test(n))return ic;return QC_OTHER}
+function qcCatTiles(){
+  const all=qcList();const m=new Map();all.forEach(d=>{const k=qcWork(d);const e=m.get(k)||{n:0,open:0};e.n++;if(d.status!=='closed')e.open++;m.set(k,e)});
+  if(!m.size)return'';const cur=UI.qs||'';
+  const tile=(k,ic,n,open)=>`<button class="qcat ${cur===k?'on':''}" data-act="qcat" data-qcat="${esc(k)}"><i class="ic">${ic}</i><b>${esc(k||'ทั้งหมด')}</b><span>${open?`<em>${open}</em> ค้าง · `:''}${n} จุด</span></button>`;
+  return`<div class="qcats">${tile('',QCI('<rect x="4" y="4" width="6.500" height="6.500" rx="1.500"/><rect x="13.500" y="4" width="6.500" height="6.500" rx="1.500"/><rect x="4" y="13.500" width="6.500" height="6.500" rx="1.500"/><rect x="13.500" y="13.500" width="6.500" height="6.500" rx="1.500"/>'),all.length,all.filter(d=>d.status!=='closed').length)}${[...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,e])=>tile(k,qcCatIcon(k),e.n,e.open)).join('')}</div>`}
 function qcFiltered(){
   const f=UI.qf||'open',q=(UI.qq||'').trim().toLowerCase();
-  return qcList().filter(d=>(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
+  return qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
     .sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
 }
 
 /* ---------- หน้ารายการ QC ---------- */
 function viewQC(){
-  const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
+  const f=UI.qf||'open',g=UI.qg||'work';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
    ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="qcmulti" title="เลือกรูปหลายรูปพร้อมกัน แต่ละรูปสร้างเป็น 1 รายการ">🖼 เลือกรูปหลายรูป (1 รูป = 1 รายการ)</label><input id="qcmulti" type="file" accept="image/*" multiple hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF${UI.qv==='table'?' (ตาราง)':''}</button><button class="btn" data-act="qchtml">HTML${UI.qv==='table'?' (ตาราง)':''}</button></div>
    <p class="hint" style="margin:0 0 10px">ใช้บันทึกงานที่พบจากการตรวจ QC โดยไม่ต้องมีใบ Inspection: ถ่ายรูปก่อนแก้ → แก้ → ถ่ายรูปหลังแก้ → ปิด · ปักหมุดตำแหน่งบน “แบบหน้างาน” และระบุแผ่นกระเบื้องที่ต้องแก้ได้</p>
+   ${qcCatTiles()}
    <div class="stats"><div><b>${all.length}</b><span>ทั้งหมด</span></div><div><b style="color:var(--bad)">${cnt('open')}</b><span>ต้องแก้ไข</span></div><div><b style="color:var(--warn)">${cnt('fixed')}</b><span>แก้แล้ว รอตรวจซ้ำ</span></div><div><b style="color:var(--good)">${cnt('closed')}</b><span>ปิดแล้ว</span></div></div>
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
    <label class="row small muted" style="gap:6px">มุมมอง<select id="qv" style="width:auto;color:var(--fg)"><option value="card" ${UI.qv!=='table'?'selected':''}>การ์ด</option><option value="table" ${UI.qv==='table'?'selected':''}>ตาราง DEFECTS LIST</option></select></label>
-   <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>
+   <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','งาน (Scope)'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>
    <input type="search" id="qq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.qq||'')}" style="width:220px"></div>`;
   const ds=qcFiltered();
   if(!ds.length)return h+`<div class="empty">${all.length?'ไม่มีรายการในมุมมองนี้':owner?'ยังไม่มี QC DEFECT กด “บันทึก DEFECT ใหม่” หรือเปิด “แบบหน้างาน” แล้วปักหมุดที่จุดที่พบ':'ยังไม่มีข้อมูล'}</div>`;
   if(UI.qv==='table')return h+(MODE.ro?qcTableView(ds):qcTableEdit(ds));
-  const key=d=>g==='building'?(d.building?'อาคาร '+d.building:'ไม่ระบุอาคาร'):g==='area'?(d.area||'ไม่ระบุพื้นที่'):g==='type'?(d.type||'ไม่ระบุประเภท'):'';
+  const key=d=>g==='work'?qcWork(d):g==='building'?(d.building?'อาคาร '+d.building:'ไม่ระบุอาคาร'):g==='area'?(d.area||'ไม่ระบุพื้นที่'):g==='type'?(d.type||'ไม่ระบุประเภท'):'';
   const groups=new Map();ds.forEach(d=>{const k=key(d);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(d)});
   for(const k of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true}))){
     const list=groups.get(k);const open=list.filter(d=>d.status!=='closed').length;
@@ -410,6 +431,7 @@ async function exportQC(kind,opt){
 
 /* ---------- ตัวจัดการเหตุการณ์ของหน้า QC / แบบหน้างาน ---------- */
 const QCACT={
+  qcat(a){UI.qs=a.dataset.qcat||'';$('#main').innerHTML=viewQC()},
   qcnew(){if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return}Promise.resolve(allocNo('qc',1)).then(n=>{const d=newQC(null,n);render();editQC(d,{after:()=>render()})}).catch(x=>toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000))},
   qcopen(a,id){const d=defectById(id);if(d)editQC(d,{after:()=>render()})},
   qcpdf(){exportQC('pdf')},qchtml(){exportQC('html')},
@@ -426,6 +448,7 @@ const QCACT={
   sitedel(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{const ids=new Set(fileItems(id).map(l=>l.id));S.library=S.library.filter(l=>!ids.has(l.id));S.defects.forEach(d=>{if(d.qc&&d.loc&&ids.has(d.loc.libId))d.loc=null});if(UI.siteFile===id)UI.siteFile=null;save();render()})}
 };
 function qcInput(t){
+  if(t.id==='qs'){UI.qs=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qf'){UI.qf=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qv'){UI.qv=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qg'){UI.qg=t.value;$('#main').innerHTML=viewQC();return true}

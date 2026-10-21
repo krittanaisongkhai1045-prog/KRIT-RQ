@@ -22,11 +22,17 @@ function pickKind(role,cb){
 function go(route,id,tab){if(route!==UI.route){UI.siteFile=null;UI.siteEdit=null}UI.route=route;if(id!==undefined)UI.reqId=id;if(tab)UI.tab=tab;render();window.scrollTo(0,0)}
 
 function lockUI(){$$('#main input,#main select,#main textarea').forEach(el=>{if(!['q','dq','dfilter','dgroup','dview','grp','qf','qg','qq'].includes(el.id))el.disabled=true})}
+const TABIC={
+ list:'<svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4.5h6M8.5 12.5l2.2 2.2 4.3-4.6"/></svg>',
+ defects:'<svg viewBox="0 0 24 24"><path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17.4v.1"/></svg>',
+ qc:'<svg viewBox="0 0 24 24"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2l1.3-2h6l1.3 2h1.2A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>',
+ site:'<svg viewBox="0 0 24 24"><path d="M3.5 7.5L9 5l6 2.5L20.5 5v11.5L15 19l-6-2.5-5.500 2.500z"/><path d="M9 5v11.500M15 7.500V19"/></svg>',
+ settings:'<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>'};
 function render(){
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
-   <nav class="nav">${[['list','รายการส่งตรวจ'],['defects','DEFECT ตามใบตรวจ'],['qc','QC Before/After'],['site','แบบหน้างาน'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล']].map(n=>`<button data-go="${n[0]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}">${n[1]}</button>`).join('')}</nav>
+   <nav class="nav">${[['list','รายการส่งตรวจ','ส่งตรวจ'],['defects','DEFECT ตามใบตรวจ','DEFECT'],['qc','QC Before/After','QC'],['site','แบบหน้างาน','แบบ'],['settings',MODE.ro?'ข้อมูลโครงการ':'ตั้งค่า / สำรองข้อมูล','ตั้งค่า']].map(n=>`<button data-go="${n[0]}" aria-label="${n[1]}" aria-current="${UI.route===n[0]||(n[0]==='list'&&UI.route==='req')}"><i class="ic">${TABIC[n[0]]}</i><span class="lb l">${n[1]}</span><span class="lb s">${n[2]}</span></button>`).join('')}</nav>
    ${MODE.kind==='cloud'&&MODE.uid?`<button class="btn sm ${MODE.siteMode?'pri':''}" data-act="sitemode">${MODE.siteMode?'● โหมดหน้างาน':'เข้าหน้างาน'}</button>`:''}${modeChip}${MODE.loginUi?(MODE.uid?`<button class="btn sm" data-act="logout" title="${esc(MODE.email)}">ออกจากระบบ</button>`:`<button class="btn sm pri" data-act="login">เข้าสู่ระบบ</button>`):''}<span class="small muted" id="savestate">${MODE.kind==='cloud'&&!MODE.uid?'':memOnly?'ไม่มีพื้นที่เก็บถาวร':MODE.kind==='cloud'?'':'บันทึกในเครื่องแล้ว'}</span>`;
   const m=$('#main');
   if(UI.route==='list')m.innerHTML=viewList();
@@ -54,13 +60,25 @@ function groupKeys(root,g){
   const b=root.building?('อาคาร '+root.building):(root.location||'ไม่ระบุอาคาร');const w=root.workType||'ไม่ระบุงาน';
   return g==='building'?[b]:g==='work'?[w]:g==='both'?[b,w]:[];
 }
+/* หน้าแรกแบบแอปมือถือ (แสดงเฉพาะจอเล็ก): ทักทาย + การ์ดสรุป DEFECT + ทางลัด */
+function mhome(roots,all){
+  const total=all.length,open=all.filter(x=>x==='open').length,sub=all.filter(x=>x==='submitted').length,closed=all.filter(x=>x==='closed').length;
+  const pct=total?Math.round(closed/total*100):0,C=2*Math.PI*34,off=C*(1-pct/100);
+  const who=(MODE.email||'').split('@')[0]||'ผู้ใช้งาน';
+  const qa=(ic,t,attr)=>`<button class="mh-qa" ${attr}><i class="ic">${ic}</i><span>${t}</span></button>`;
+  return`<div class="mhome">
+   <div class="mh-top"><div class="mh-av">${esc(who.charAt(0).toUpperCase())}</div><div class="mh-who"><small>โครงการ</small><b>${esc(S.project.name||'')}</b></div><button class="mh-bell" data-go="settings" aria-label="ตั้งค่า">${TABIC.settings}</button></div>
+   <div class="mh-hero"><div class="mh-hl"><span>DEFECT ค้างแก้</span><b>${open}</b><small>จาก ${total} จุด · ${roots.length} ชุดงานส่งตรวจ${sub?` · รอผล ${sub}`:''}</small><button class="mh-cta" data-go="defects">ดูรายการ DEFECT</button></div>
+    <svg class="mh-ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" class="bg"/><circle cx="42" cy="42" r="34" class="fg" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 42 42)"/><text x="42" y="40" text-anchor="middle" class="n">${pct}%</text><text x="42" y="55" text-anchor="middle" class="t">ปิดแล้ว</text></svg></div>
+   <div class="mh-qas">${canCreate()?qa('<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>','ส่งตรวจใหม่','data-act="newopen"'):''}${qa(TABIC.qc,'ถ่าย QC','data-go="qc"')}${qa(TABIC.site,'แบบหน้างาน','data-go="site"')}${qa(TABIC.defects,'DEFECT','data-go="defects"')}</div>
+   <h2 class="mh-sec">ชุดงานส่งตรวจ</h2></div>`}
 function viewList(){
   const roots=S.requests.filter(r=>r.type==='OPEN').sort((a,b)=>b.num-a.num);
   const q=UI.q.trim().toLowerCase();const g=UI.grp||'building';
   const match=r=>!q||[r.no,r.workText,r.workType,r.location,r.building].join(' ').toLowerCase().includes(q);
   const all=S.defects.filter(d=>!d.qc).map(defectStatus);
   const stats=`<div class="stats"><div><b>${roots.length}</b><span>ชุดงานส่งตรวจ</span></div><div><b style="color:var(--bad)">${all.filter(s=>s==='open').length}</b><span>DEFECT ต้องแก้</span></div><div><b style="color:var(--warn)">${all.filter(s=>s==='submitted').length}</b><span>ส่ง CLOSE แล้ว รอผล</span></div><div><b style="color:var(--good)">${all.filter(s=>s==='closed').length}</b><span>ปิดแล้ว</span></div></div>`;
-  let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">รายการส่งตรวจ</h1><label class="row small muted" style="gap:6px">จัดกลุ่มตาม<select id="grp" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','ชนิดงาน'],['both','อาคาร › ชนิดงาน'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label><input type="search" id="q" placeholder="ค้นหาเลขที่ / อาคาร / งาน" value="${esc(UI.q)}" style="width:220px">${canCreate()?'<button class="btn pri" data-act="newopen">＋ ส่งตรวจใหม่</button>':''}</div>${stats}`;
+  let h=mhome(roots,all)+`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto" class="mh-hide">รายการส่งตรวจ</h1><label class="row small muted" style="gap:6px">จัดกลุ่มตาม<select id="grp" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','ชนิดงาน'],['both','อาคาร › ชนิดงาน'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label><input type="search" id="q" placeholder="ค้นหาเลขที่ / อาคาร / งาน" value="${esc(UI.q)}" style="width:220px">${canCreate()?'<button class="btn pri" data-act="newopen">＋ ส่งตรวจใหม่</button>':''}</div>${stats}`;
   const vis=roots.filter(rt=>chainReqs(rt.id).some(match));
   if(!vis.length)return h+`<div class="empty">${S.requests.length?'ไม่มีรายการที่ตรงกับคำค้น':MODE.ro?'ยังไม่มีข้อมูลในระบบ':'ยังไม่มีรายการ กด “ส่งตรวจใหม่” เพื่อสร้างใบตรวจฉบับแรก'}</div>`;
   const tree=new Map();
@@ -525,7 +543,8 @@ function viewSettings(){
   <div class="panel"><h3>รายการเลือก DEFECT</h3><div class="grid g2"><label class="f">ประเภท DEFECT (บรรทัดละ 1)<textarea data-list="defectTypes" rows="10">${esc(P.defectTypes.join('\n'))}</textarea></label><label class="f">วิธีแก้เฉพาะจุด (บรรทัดละ 1)<textarea data-list="fixMethods" rows="10">${esc(P.fixMethods.join('\n'))}</textarea></label></div></div>
   <div class="panel"><h3>คลังแบบ (${sitePages().length})</h3>${sitePages().length?`<div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${sitePages().map(l=>`<div class="card"><div class="thumb" style="cursor:default">${annotatedSvg(imgSrc(l.imgId),l.w,l.h,[],[])}</div><div class="body"><input type="text" data-lib="${l.id}" value="${esc(l.name)}" aria-label="ชื่อแบบ"><button class="btn sm bad" data-act="dellib" data-id="${l.id}">ลบออกจากคลัง</button></div></div>`).join('')}</div>`:'<div class="empty small">ยังไม่มีแบบในคลัง เพิ่มจากหน้า “แบบ / ขอบเขต” ในใบตรวจ</div>'}</div>
   <div class="panel"><h3>สำรองและกู้ข้อมูล</h3><div class="hint" id="usage"></div><p class="hint">ข้อมูลทั้งหมดเก็บในเบราว์เซอร์เครื่องนี้ ควรกดสำรองเป็นไฟล์เป็นระยะ โดยเฉพาะก่อนล้างข้อมูลเบราว์เซอร์หรือเปลี่ยนเครื่อง</p>
-   <div class="row"><button class="btn pri" data-act="backup">สำรองข้อมูลทั้งหมด (.json)</button><label class="btn" for="restorefile">กู้ข้อมูลจากไฟล์</label><input id="restorefile" type="file" accept=".json,application/json" hidden><button class="btn bad" data-act="wipe" style="margin-left:auto">ล้างข้อมูลทั้งหมด</button></div></div>`;
+   <div class="row"><button class="btn pri" data-act="backup">สำรองข้อมูลทั้งหมด (.json)</button><label class="btn" for="restorefile">กู้ข้อมูลจากไฟล์</label><input id="restorefile" type="file" accept=".json,application/json" hidden><button class="btn bad" data-act="wipe" style="margin-left:auto">ล้างข้อมูลทั้งหมด</button></div></div>
+  <div class="credit"><b>Inspection Desk</b><span>พัฒนาโดย KRITTANAI</span></div>`;
 }
 function parseGroup(g,text){
   const old=new Map(g.items.map(i=>[i.en,i]));
