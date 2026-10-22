@@ -335,3 +335,115 @@ body::before{content:"";position:fixed;left:0;right:0;top:0;height:340px;z-index
 
 .clbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}.clbar input[type=search]{flex:1 1 100%}.clbar select{flex:1 1 130px;min-width:0}.clbar .seg{display:flex;gap:4px}
 .qtv.clt{min-width:960px}.qtv.clt td.dph{width:170px}.qtv.clt .dl-im{width:160px;height:96px}.qtv.clt .dl-im svg{width:100%;height:100%}
+
+/* ========= Aurora Glass: Animation + พื้นหลัง ========= */
+body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
+  background:radial-gradient(34% 28% at 20% 10%,rgba(255,122,26,.42),transparent 70%),radial-gradient(30% 26% at 90% 40%,rgba(255,61,84,.22),transparent 70%),radial-gradient(38% 30% at 30% 95%,rgba(255,179,71,.2),transparent 70%);
+  animation:bgdrift 20s ease-in-out infinite alternate;will-change:transform}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:34px 34px;
+  -webkit-mask-image:radial-gradient(120% 60% at 50% 0,#000 0,transparent 75%);mask-image:radial-gradient(120% 60% at 50% 0,#000 0,transparent 75%);animation:griddrift 30s linear infinite}
+@keyframes bgdrift{0%{transform:translate3d(-2%,0,0) scale(1)}50%{transform:translate3d(4%,3%,0) scale(1.12)}100%{transform:translate3d(-4%,5%,0) scale(1.04)}}
+@keyframes griddrift{to{background-position:34px 34px}}
+@keyframes pgin{from{opacity:0;transform:translateY(26px) scale(.98);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+@keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes sheetup{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+#main.pgin>*{animation:pgin .55s cubic-bezier(.2,.8,.2,1) both}
+#main.pgin>*:nth-child(2){animation-delay:.05s}#main.pgin>*:nth-child(3){animation-delay:.1s}#main.pgin>*:nth-child(4){animation-delay:.15s}#main.pgin>*:nth-child(5){animation-delay:.2s}#main.pgin>*:nth-child(n+6){animation-delay:.25s}
+.ov{animation:fadein .25s ease both}
+.ov.modal>.box{animation:pop .3s cubic-bezier(.2,.9,.3,1.1) both}
+@media(max-width:820px){.ov.modal>.box{animation:sheetup .5s cubic-bezier(.34,1.4,.64,1) both}.ov.modal{-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}}
+/* กดแล้วยุบ-เด้งแบบสปริง */
+button,.btn,.chip,.card,.acard,.rc,.qcat,.plxh,.pk,.snp,.mh-qa,.nav button,[data-act],[data-go]{transition:transform .38s cubic-bezier(.34,1.56,.64,1),background-color .25s,border-color .25s,box-shadow .25s,opacity .2s,color .25s,filter .2s}
+button:active,.btn:active,.acard:active,.rc:active,.qcat:active,.card:active,.pk:active,.snp:active,.plxh:active,.mh-qa:active,.nav button:active{transform:scale(.92);filter:brightness(1.15);transition-duration:.1s}
+@media(hover:hover){.acard:hover,.card:hover,.rc:hover,.qcat:hover{transform:translateY(-2px)}}
+.rip{position:fixed;z-index:9999;width:10px;height:10px;margin:-5px;border-radius:50%;border:2px solid var(--accent);pointer-events:none;animation:rip .7s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes rip{from{transform:scale(1);opacity:.85}to{transform:scale(11);opacity:0}}
+.rc-in{animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,122,26,.5)}50%{box-shadow:0 0 0 8px rgba(255,122,26,0)}}
+.plxbd{animation:pgin .35s ease both}
+/* การ์ดหลักเงาแสงพาด */
+.mh-hero{position:relative;overflow:hidden}
+.mh-hero:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 48%,transparent 66%);transform:translateX(-120%);animation:sheen 5s ease-in-out infinite 1.4s}
+@keyframes sheen{to{transform:translateX(120%)}}
+.mh-hero{min-height:188px}.mh-ring{align-self:flex-start;margin-top:-2px}.mh-ring .fg{transition:stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1)}
+/* มังกรน้อย */
+.dragon{position:absolute;right:4px;bottom:-3px;width:84px;height:76px;pointer-events:none;transform-origin:50% 100%;animation:dbob 2.6s ease-in-out infinite}
+.dragon svg{width:100%;height:100%;overflow:visible}
+@keyframes dbob{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-5px) rotate(1.5deg)}}
+.dragon.hop{animation:dhop .7s cubic-bezier(.34,1.56,.64,1)}
+@keyframes dhop{0%{transform:scale(1,1)}25%{transform:scale(1.12,.86)}55%{transform:translateY(-26px) scale(.94,1.1) rotate(-6deg)}100%{transform:none}}
+.dragon .tail{transform-origin:30px 80px;animation:dwag 1.4s ease-in-out infinite}@keyframes dwag{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(11deg)}}
+.dragon .wing{transform-origin:76px 66px;animation:dflap .9s ease-in-out infinite}@keyframes dflap{0%,100%{transform:rotate(8deg) scaleY(1)}50%{transform:rotate(-14deg) scaleY(.82)}}
+.dragon .eye{transform-box:fill-box;transform-origin:center;animation:dblink 4s infinite}@keyframes dblink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.08)}}
+.dragon .whisk{transform-origin:60px 60px;animation:dws 2.4s ease-in-out infinite}@keyframes dws{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+.dragon .fire{transform-origin:64px 74px;opacity:0;animation:dpuff 4s ease-out infinite 1.4s}@keyframes dpuff{0%,70%{opacity:0;transform:scale(.2)}78%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.6) translate(10px,6px)}}
+.dragon .sp{animation:dtw 1.8s ease-in-out infinite}@keyframes dtw{0%,100%{opacity:.2}50%{opacity:1}}
+/* แถบเมนูล่างแบบลอยกระจก + แผ่นส้มสไลด์ */
+@media(max-width:820px){
+  .nav{left:12px!important;right:12px!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;border-radius:26px!important;padding:6px!important;background:rgba(20,20,23,.74)!important;border:1px solid rgba(255,255,255,.09)!important;box-shadow:0 14px 40px rgba(0,0,0,.55)!important;-webkit-backdrop-filter:saturate(1.6) blur(22px)!important;backdrop-filter:saturate(1.6) blur(22px)!important;overflow:hidden}
+  .nav button{position:relative;z-index:1}
+  .nav .pill{position:absolute;top:6px;bottom:6px;left:0;border-radius:20px;background:linear-gradient(135deg,rgba(255,138,43,.30),rgba(255,100,20,.14));border:1px solid rgba(255,138,43,.45);box-shadow:0 0 22px rgba(255,122,26,.35);z-index:0;transition:transform .55s cubic-bezier(.34,1.45,.64,1),width .3s;pointer-events:none}
+  .nav button[aria-current="true"] .ic{background:transparent!important;transform:translateY(-2px) scale(1.12)}
+  .nav .ic{transition:transform .5s cubic-bezier(.34,1.56,.64,1)}
+  .wrap{padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))!important}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+/* ===== ส่งออกห้อง ===== */
+.accexp{display:inline-flex;gap:6px;margin-left:auto}
+/* ===== ตาราง QC / เคลม บนมือถือ: แสดงเป็นการ์ดต่อแถว ดูครบไม่ต้องเลื่อนซ้ายขวา ===== */
+@media(max-width:820px){
+  .qtw{overflow:visible!important;border:0!important;background:none!important;box-shadow:none!important}
+  .qtv,.qtv.qte,.qtv.clt{min-width:0!important;width:100%;display:block;border:0}
+  .qtv thead{display:none}.qtv tbody{display:block}
+  .qtv tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px;padding:12px;margin:0 0 10px;border:1px solid var(--line);border-radius:18px;background:var(--surface);cursor:pointer}
+  .qtv tbody tr:hover{background:var(--surface)}
+  .qtv td{display:block;border:0!important;padding:0!important;min-width:0!important;width:auto!important;grid-column:span 1;text-align:left!important}
+  .qtv td::before{content:attr(data-l);display:block;font-size:10.5px;color:var(--muted);margin-bottom:3px;font-weight:600}
+  .qtv td:empty{display:none}
+  .qtv td:nth-child(1){grid-column:span 2;display:flex;gap:10px;align-items:baseline}.qtv td:nth-child(1)::before{display:none}
+  .qtv td:nth-child(2),.qtv td:nth-child(5),.qtv td:nth-child(6),.qtv td:nth-child(13){grid-column:span 2}
+  .qtv .im,.qtv.qte .ph .im{width:100%!important;height:auto!important;aspect-ratio:4/3}
+  .qtv .dl-im{width:100%!important;height:auto!important;aspect-ratio:4/3}
+  .qtv input[type=text],.qtv input[type=date],.qtv textarea{width:100%;min-height:40px;font-size:16px}
+  .qtv textarea{min-height:64px}
+  .qte td.c{display:flex;align-items:center;gap:8px}.qte td.c::before{margin:0}
+  .qte td.c input[type=checkbox]{width:24px;height:24px}
+  /* ตารางเคลม (8 ช่อง) */
+  .qtv.clt td:nth-child(n){grid-column:span 2}
+  .qtv.clt td:nth-child(5),.qtv.clt td:nth-child(6),.qtv.clt td:nth-child(7),.qtv.clt td:nth-child(8){grid-column:span 1}
+  .qtv.clt td:nth-child(1){display:flex}
+}
+/* ===== Splash + ช่องกรอกยกตัว + ปุ่มโหลด (สไตล์แอป) ===== */
+#splash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#050505;transition:opacity .6s ease,visibility .6s,transform .6s cubic-bezier(.2,.8,.2,1)}
+#splash.out{opacity:0;visibility:hidden;transform:scale(1.04)}
+#splash b{font:600 22px/1 var(--f-head,system-ui);letter-spacing:.42em;color:#fff;text-indent:.42em;opacity:0;animation:spin .9s cubic-bezier(.2,.8,.2,1) .15s forwards}
+#splash i{display:block;width:120px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent,#ff7a1a),transparent);transform:scaleX(0);animation:spline 1.1s cubic-bezier(.2,.8,.2,1) .3s forwards}
+#splash:before{content:"";position:absolute;width:70vw;height:70vw;border-radius:50%;background:radial-gradient(circle,rgba(255,122,26,.35),transparent 65%);filter:blur(30px);animation:spglow 2s ease-in-out infinite alternate}
+@keyframes spin{from{opacity:0;transform:translateY(14px);filter:blur(8px)}to{opacity:1;transform:none;filter:none}}
+@keyframes spline{to{transform:scaleX(1)}}@keyframes spglow{to{transform:scale(1.25);opacity:.7}}
+input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea{transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s,border-color .25s,background-color .25s}
+input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus,textarea:focus{transform:translateY(-2px);border-color:var(--accent)!important;box-shadow:0 10px 26px rgba(255,122,26,.2),0 0 0 3px rgba(255,122,26,.18);outline:none}
+.btn.busy,button.busy{position:relative;color:transparent!important;pointer-events:none}
+.btn.busy::after,button.busy::after{content:"";position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spn .7s linear infinite}
+.btn.pri.busy::after{border-color:rgba(26,11,0,.25);border-top-color:#1a0b00}
+@keyframes spn{to{transform:rotate(360deg)}}
+/* ตาราง QC บนมือถือ: บีบให้กระชับ */
+@media(max-width:820px){
+  .qtv:not(.clt) tbody tr{gap:6px 8px;padding:10px}
+  .qtv:not(.clt) td:nth-child(2){grid-column:span 1;order:1}.qtv:not(.clt) td:nth-child(6){grid-column:span 1;order:2}
+  .qtv:not(.clt) td:nth-child(3){order:3}.qtv:not(.clt) td:nth-child(4){order:4}.qtv:not(.clt) td:nth-child(5){order:5}
+  .qtv:not(.clt) td:nth-child(7){order:6}.qtv:not(.clt) td:nth-child(8){order:7}.qtv:not(.clt) td:nth-child(9){order:8}.qtv:not(.clt) td:nth-child(10){order:9}
+  .qtv:not(.clt) td:nth-child(11){order:10}.qtv:not(.clt) td:nth-child(12){order:11}.qtv:not(.clt) td:nth-child(13){order:12}
+  .qtv:not(.clt) td:nth-child(1){order:0}
+  .qtv td::before{margin-bottom:1px;font-size:10px}
+  .qtv input[type=text],.qtv input[type=date]{min-height:34px;padding:4px 10px;border-radius:12px}
+  .qtv textarea{min-height:40px!important;height:40px;padding:6px 10px;border-radius:12px}
+  .qtv .im,.qtv.qte .ph .im{aspect-ratio:16/10;max-height:96px}
+  .qte .ph{gap:3px}.qte .ph .btn{padding:3px 8px;font-size:11.5px;min-height:28px}
+  .qte td.c input[type=checkbox]{width:20px;height:20px}
+}
+
+.dragon{display:none!important}

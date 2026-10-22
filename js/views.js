@@ -31,6 +31,7 @@ const TABIC={
  site:'<svg viewBox="0 0 24 24"><path d="M3.5 7.5L9 5l6 2.5L20.5 5v11.5L15 19l-6-2.5-5.500 2.500z"/><path d="M9 5v11.500M15 7.500V19"/></svg>',
  settings:'<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>'};
 function render(){
+  pageAnim(UI.route+'|'+UI.reqId+'|'+(UI.route==='req'?UI.tab:''));
   document.body.classList.toggle('ro',MODE.ro);
   const modeChip=MODE.kind!=='cloud'?'':!MODE.uid?'<span class="chip warn">ดูอย่างเดียว · ยังไม่ได้เข้าสู่ระบบ</span>':`<span class="chip good" title="${esc(MODE.email)}">${MODE.admin?'แอดมิน':'สมาชิก'} · ${esc(MODE.email)}</span>`;
   $('#top').innerHTML=`<div class="brand"><b>Inspection Desk</b><span>${esc(S.project.name)}</span></div>
@@ -559,3 +560,7 @@ function parseGroup(g,text){
   const old=new Map(g.items.map(i=>[i.en,i]));
   return text.split('\n').map(l=>l.trim()).filter(Boolean).map((l,k)=>{const[en,th]=l.split('|').map(x=>x.trim());const o=old.get(en);return o?{id:o.id,en,th:th||''}:{id:g.id+'n'+uid(),en,th:th||''}});
 }
+
+/* animation เปลี่ยนหน้า: เล่นเฉพาะเมื่อเปลี่ยนหน้า/แท็บ (ไม่เล่นตอนรีเฟรชข้อมูล) */
+let _pgKey='';
+function pageAnim(key){if(key===_pgKey)return;_pgKey=key;const m=document.getElementById('main');if(!m)return;m.classList.remove('pgin');void m.offsetWidth;m.classList.add('pgin');clearTimeout(pageAnim.t);pageAnim.t=setTimeout(()=>m.classList.remove('pgin'),800)}
