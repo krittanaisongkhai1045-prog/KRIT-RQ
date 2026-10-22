@@ -122,7 +122,7 @@ function accEdit(a,isNew){
   const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro=perm?'0':'1';const box=$('.box',o);
   const draw=()=>{
     const st=isNew?'':accState(a,a.date);
-    box.innerHTML=`<div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">${isNew?'บันทึกคำขอเข้าห้อง':'คำขอเข้าห้อง'} ${isNew?'':chip(ACC_ST[st][0],ACC_ST[st][1])}</h3><button class="btn pri" data-a="close">${isNew?'ยกเลิก':'เสร็จ'}</button></div>
+    box.innerHTML=`<div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">${isNew?'บันทึกคำขอเข้าห้อง':'คำขอเข้าห้อง'} ${isNew?'':chip(ACC_ST[st][0],ACC_ST[st][1])}</h3>${!isNew&&[...(a.photos||[]),...(a.before||[]),...(a.after||[])].length?'<button class="btn" data-a="dlall" style="margin-right:6px">⬇ ดาวน์โหลดรูปทั้งหมด</button>':''}<button class="btn pri" data-a="close">${isNew?'ยกเลิก':'เสร็จ'}</button></div>
      <div class="accphotos">${(a.photos||[]).map(p=>`<div class="qp"><div class="thumb" data-a="photo" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,[],[])}</div>${ro?'':`<button class="btn sm bad" data-a="delp" data-id="${p.id}">ลบรูป</button>`}</div>`).join('')}
       ${ro?'':`<div class="qp"><label class="btn" for="ac-cam">📷 ถ่ายเอกสาร</label><input id="ac-cam" data-accph="1" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="ac-up">🖼 เลือกรูป (หลายรูป)</label><input id="ac-up" data-accph="1" type="file" accept="image/*" multiple hidden></div>`}</div>
      ${[['before','📸 รูป BEFORE ก่อนเข้าห้อง','ac-b','Before',ro],['after','📷 รูป AFTER หลังใช้ห้อง','ac-a','After',!perm]].map(([f,t,id,lb,r0])=>`<div class="f" style="margin-top:12px"><b class="small">${t} (${(a[f]||[]).length})</b>
@@ -153,6 +153,7 @@ function accEdit(a,isNew){
     if(e.target===o){if(isNew){o.remove()}else finish();return}
     const b=e.target.closest('[data-a]');if(!b)return;const k=b.dataset.a;
     if(k==='close'){if(isNew){o.remove()}else{if(!ro)accSave(a,false);finish()}return}
+    if(k==='dlall'){accDownloadPhotos(a,b);return}
     if(k==='photo'){const p=[...(a.photos||[]),...(a.before||[]),...(a.after||[])].find(x=>x.id===b.dataset.id);if(p)openBoard({kind:'photo',ro:true,title:'เอกสารขอเข้าห้อง',imgUrl:imgSrc(p.imgId),w:p.w,h:p.h,shapes:[],onChange:()=>{},onClose:()=>{}});return}
     if(k==='dela'&&perm){a.after=(a.after||[]).filter(x=>x.id!==b.dataset.id);draw();if(!isNew)accSave(a,false);return}
     if(k==='out'&&perm&&!isNew){a.to=accNowHM();a.done=true;accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
@@ -193,16 +194,17 @@ function accRoomsDlg(){
 }
 
 /* ----- ภาพสรุปรายวัน ----- */
-function accSnapHTML(day){
+function accSnapHTML(day,opt){
+  opt=opt||{};
   const reqs=accDayReqs(day).filter(a=>a.status!=='cancel');const P=S.project;
   const used=new Set();reqs.forEach(a=>(a.rooms||[]).forEach(k=>used.add(k)));
   const rooms=accRoomList();
   const cell=r=>{const rs=reqs.filter(a=>(a.rooms||[]).includes(r.key));
     return`<div style="border:1px solid ${rs.length?'#e8761a':'#cfd5d3'};background:${rs.length?'#fff2e5':'#f6f8f7'};border-radius:8px;padding:6px 8px;min-height:54px"><div style="font-weight:700;font-size:15px">${esc(r.n)}</div>${rs.length?rs.map(a=>`<div style="font-size:11px;line-height:1.3">${esc(a.who||'-')}${a.org?' ('+esc(a.org)+')':''} <span style="font-family:monospace">${esc(accTime(a))}</span></div>`).join(''):'<div style="font-size:11px;color:#8a9490">ไม่มีผู้ขอ</div>'}</div>`};
-  const body=accGroups().map(g=>`<div style="margin-top:12px"><div style="font-weight:700;font-size:16px;border-bottom:2px solid #cfd5d3;padding-bottom:3px;margin-bottom:6px">${g.b==='-'?'ไม่ระบุอาคาร':'อาคาร '+esc(g.b)}</div>${g.floors.map(fl=>`<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:58px;flex:none;font-weight:600;font-size:13px;padding-top:6px">${fl.f?'ชั้น '+esc(fl.f):''}</div><div style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:6px">${fl.rooms.map(cell).join('')}</div></div>`).join('')}</div>`).join('');
+  const body=(opt.groups||accGroups()).map(g=>`<div style="margin-top:12px"><div style="font-weight:700;font-size:16px;border-bottom:2px solid #cfd5d3;padding-bottom:3px;margin-bottom:6px">${g.b==='-'?'ไม่ระบุอาคาร':'อาคาร '+esc(g.b)}</div>${g.floors.map(fl=>`<div style="display:flex;gap:8px;margin-bottom:6px"><div style="width:58px;flex:none;font-weight:600;font-size:13px;padding-top:6px">${fl.f?'ชั้น '+esc(fl.f):''}</div><div style="flex:1;display:grid;grid-template-columns:repeat(6,1fr);gap:6px">${fl.rooms.map(cell).join('')}</div></div>`).join('')}</div>`).join('');
   return`<div style="width:1123px;box-sizing:border-box;padding:28px 32px;background:#fff;color:#18231f;font-family:Sarabun,'Noto Sans Thai',sans-serif">
-   <div style="display:flex;align-items:flex-end;gap:16px"><div style="flex:1"><div style="font-size:12px;color:#5a6b66">${esc(P.name||'')} · ${esc(P.company&&P.company.name||'')}</div><div style="font-size:26px;font-weight:700">ตารางสถานะการเข้าใช้ห้อง</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:700">${esc(accDateLabel(day))}</div><div style="font-size:12px;color:#5a6b66">${reqs.length} คำขอ · ${used.size}/${rooms.length} ห้องมีผู้ขอ</div></div></div>${body||'<p>ยังไม่มีรายชื่อห้อง</p>'}
-   <div style="margin-top:14px;font-size:11px;color:#8a9490">บันทึกอัตโนมัติโดย Inspection Desk · ${esc(new Date().toLocaleString('th-TH'))}</div></div>`;
+   <div style="display:flex;align-items:flex-end;gap:16px"><div style="flex:1"><div style="font-size:12px;color:#5a6b66">${esc(P.name||'')} · ${esc(P.company&&P.company.name||'')}</div><div style="font-size:26px;font-weight:700">ตารางสถานะการเข้าใช้ห้อง${opt.title?' · '+esc(opt.title):''}</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:700">${esc(accDateLabel(day))}</div><div style="font-size:12px;color:#5a6b66">${opt.groups?`${opt.groups.reduce((n,g)=>n+g.floors.reduce((m,f)=>m+f.rooms.length,0),0)} ห้อง · ${opt.groups.reduce((n,g)=>n+g.floors.reduce((m,f)=>m+f.rooms.filter(r=>used.has(r.key)).length,0),0)} ห้องมีผู้ขอ`:`${reqs.length} คำขอ · ${used.size}/${rooms.length} ห้องมีผู้ขอ`}</div></div></div>${body||'<p>ยังไม่มีรายชื่อห้อง</p>'}
+   <div style="margin-top:14px;font-size:11px;color:#8a9490">${opt.groups?'ส่งออกโดย':'บันทึกอัตโนมัติโดย'} Inspection Desk · ${esc(new Date().toLocaleString('th-TH'))}</div></div>`;
 }
 async function accMakeSnap(day,quiet){
   if(!accRoomList().length){if(!quiet)toast('ยังไม่มีรายชื่อห้อง');return false}
@@ -220,21 +222,110 @@ async function accMakeSnap(day,quiet){
     save();return true;
   }finally{host.remove()}
 }
-/* ส่งออกตารางสถานะห้องของวันที่เลือกเป็น PDF / PNG */
+/* ส่งออกตารางสถานะห้อง: เลือกอาคาร/ชั้น แยกไฟล์ตามอาคาร/ชั้น และแนบรายละเอียดแต่ละห้อง (รูปเอกสาร/Before/After) */
+const accRoomsOf=gs=>gs.flatMap(g=>g.floors.flatMap(f=>f.rooms));
+function accFilterGroups(b,f){
+  return accGroups().filter(g=>!b||g.b===b).map(g=>({b:g.b,floors:g.floors.filter(fl=>!f||fl.f===f)})).filter(g=>g.floors.length);
+}
+/* แยกกลุ่มตามโหมด: all=รวม, b=แยกอาคาร, f=แยกชั้น  → [{name,groups}] */
+function accSplit(gs,mode){
+  const bl=g=>g.b==='-'?'ไม่ระบุอาคาร':'อาคาร '+g.b;
+  if(mode==='b')return gs.map(g=>({name:bl(g),groups:[g]}));
+  if(mode==='f')return gs.flatMap(g=>g.floors.map(fl=>({name:bl(g)+(fl.f?' ชั้น '+fl.f:''),groups:[{b:g.b,floors:[fl]}]})));
+  return[{name:'',groups:gs}];
+}
+function accDetailBlocks(day,keys){
+  const set=new Set(keys);
+  return accDayReqs(day).filter(a=>a.status!=='cancel'&&(a.rooms||[]).some(k=>set.has(k)));
+}
+function accDetailPages(day,reqs,title){
+  const P=S.project,W=794,PH=1123,PAD=28,CH=PH-PAD*2-52;
+  const th=p=>`<div style="width:172px;height:130px;background:#eef1f0;border-radius:6px;overflow:hidden">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,[],[]).replace('<svg','<svg style="width:100%;height:100%;display:block"')}</div>`;
+  const sec=(lb,L)=>{if(!(L||[]).length)return{h:'',n:0};const sh=L.slice(0,8);const rows=Math.ceil(sh.length/4);
+    return{n:28+rows*138,h:`<div style="font-size:12px;font-weight:700;margin:8px 0 4px;color:#444">${lb} (${L.length})${L.length>8?' · แสดง 8 รูปแรก':''}</div><div style="display:grid;grid-template-columns:repeat(4,172px);gap:6px">${sh.map(th).join('')}</div>`}};
+  const blocks=reqs.map(a=>{
+    const rn=(a.rooms||[]).map(accRoomName);const chips=rn.slice(0,16).map(x=>`<span style="display:inline-block;background:#fff2e5;border:1px solid #e8761a;border-radius:99px;padding:1px 9px;margin:0 4px 4px 0;font-size:12px">${esc(x)}</span>`).join('')+(rn.length>16?`<span style="font-size:12px">+${rn.length-16}</span>`:'');
+    const ss=[sec('เอกสารขอเข้าห้อง',a.photos),sec('BEFORE ก่อนเข้าห้อง',a.before),sec('AFTER หลังใช้ห้อง',a.after)];
+    return{h:`<div style="border:1px solid #cfd5d3;border-radius:10px;padding:10px 12px;margin-bottom:10px;break-inside:avoid"><div style="display:flex;gap:10px;align-items:baseline"><b style="font-size:16px">${esc(a.who||'(ไม่ระบุผู้ขอ)')}</b><span style="font-size:12px;color:#555">${esc(a.org||'')}</span><span style="margin-left:auto;font-family:monospace;font-size:13px">${esc(accTime(a))}</span></div>
+     <div style="margin-top:6px">${chips}</div>${a.note?`<div style="font-size:12px;color:#555">หมายเหตุ: ${esc(a.note)}</div>`:''}${ss.map(x=>x.h).join('')||'<div style="font-size:12px;color:#999;margin-top:6px">ไม่มีรูปแนบ</div>'}</div>`,
+     n:Math.min(CH,62+(a.note?18:0)+Math.ceil(rn.slice(0,16).length/6)*26+ss.reduce((t,x)=>t+x.n,0)+(ss.every(x=>!x.n)?24:0))}});
+  const pages=[];let cur=[],used=0;
+  for(const b of blocks){if(cur.length&&used+b.n>CH){pages.push(cur);cur=[];used=0}cur.push(b);used+=b.n+12}
+  if(cur.length)pages.push(cur);
+  return pages.map((pg,i)=>`<div style="width:${W}px;height:${PH}px;box-sizing:border-box;padding:${PAD}px;background:#fff;color:#18231f;font-family:Sarabun,'Noto Sans Thai',sans-serif;overflow:hidden"><div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #cfd5d3;padding-bottom:6px;margin-bottom:10px"><div><div style="font-size:11px;color:#5a6b66">${esc(P.name||'')}</div><b style="font-size:18px">รายละเอียดการเข้าใช้ห้อง${title?' · '+esc(title):''}</b></div><div style="margin-left:auto;font-size:13px">${esc(accDateLabel(day))} · หน้า ${i+1}/${pages.length}</div></div>${pg.map(b=>b.h).join('')}</div>`);
+}
 async function accExport(kind){
   const day=accDay();if(!accRoomList().length){toast('ยังไม่มีรายชื่อห้อง');return}
-  const host=document.createElement('div');host.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1';host.innerHTML=accSnapHTML(day);document.body.appendChild(host);
+  const all=accGroups();const o=overlay('<div class="box"></div>','modal');o.dataset.ro='0';const box=$('.box',o);
+  const st={b:'',f:'',split:'all',fmt:kind==='png'?'png':'pdf',det:kind!=='png'};
+  const draw=()=>{
+    const bs=all.map(g=>g.b);const fs=[...new Set(all.filter(g=>!st.b||g.b===st.b).flatMap(g=>g.floors.map(f=>f.f)))];
+    const gs=accFilterGroups(st.b,st.f);const n=accSplit(gs,st.split).length;
+    box.innerHTML=`<h3 style="margin-bottom:4px">ส่งออกสถานะห้อง · ${esc(accDateLabel(day))}</h3><p class="hint">เลือกอาคาร/ชั้นที่ต้องการ และแยกเป็นภาพ/หน้าแยกตามอาคารหรือชั้นได้</p>
+     <div class="grid"><label class="f">อาคาร<select data-e="b"><option value="">ทุกอาคาร</option>${bs.map(b=>`<option value="${esc(b)}" ${st.b===b?'selected':''}>${b==='-'?'ไม่ระบุอาคาร':esc(b)}</option>`).join('')}</select></label>
+      <label class="f">ชั้น<select data-e="f"><option value="">ทุกชั้น</option>${fs.map(f=>`<option value="${esc(f)}" ${st.f===f?'selected':''}>${f?esc(f):'ไม่ระบุชั้น'}</option>`).join('')}</select></label>
+      <label class="f">แยกภาพ/หน้า<select data-e="split"><option value="all" ${st.split==='all'?'selected':''}>รวมเป็นภาพเดียว</option><option value="b" ${st.split==='b'?'selected':''}>แยกตามอาคาร</option><option value="f" ${st.split==='f'?'selected':''}>แยกตามชั้น</option></select></label>
+      <label class="f">รูปแบบไฟล์<select data-e="fmt"><option value="pdf" ${st.fmt==='pdf'?'selected':''}>PDF (หลายหน้า)</option><option value="png" ${st.fmt==='png'?'selected':''}>PNG (ภาพ${n>1?' — รวมเป็น ZIP':''})</option></select></label></div>
+     <label class="chk" style="margin-top:10px"><input type="checkbox" data-e="det" ${st.det?'checked':''}> แนบรายละเอียดแต่ละห้อง (ผู้ขอ เวลา และรูปเอกสาร / Before / After)</label>
+     <p class="small muted" style="margin:8px 0 0">จะได้ ${n} ${st.fmt==='pdf'?'ส่วน':'ภาพ'}ตารางห้อง${st.det?' + หน้ารายละเอียด':''}</p>
+     <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" data-x="no">ยกเลิก</button><button class="btn pri" data-x="go">ส่งออก</button></div>`};
+  draw();
+  o.addEventListener('change',e=>{const t=e.target,k=t.dataset.e;if(!k)return;st[k]=t.type==='checkbox'?t.checked:t.value;if(k==='b')st.f='';draw()});
+  o.addEventListener('click',async e=>{
+    if(e.target===o||e.target.closest('[data-x=no]')){o.remove();return}
+    if(!e.target.closest('[data-x=go]'))return;o.remove();await accRunExport(day,st)});
+}
+/* ดาวน์โหลดรูปทั้งหมดของคำขอ (เอกสาร / Before / After) เป็น ZIP หรือทีละไฟล์ */
+async function accDownloadPhotos(a,btn){
+  const L=[['เอกสาร',a.photos],['Before',a.before],['After',a.after]].flatMap(([n,l])=>(l||[]).map((p,i)=>({p,name:`${(a.who||'request').replace(/[\\/:*?"<>|\s]+/g,'-')}_${a.date||''}_${n}_${i+1}.jpg`})));
+  if(!L.length)return;if(btn)btn.classList.add('busy');
   try{
-    toast(kind==='pdf'?'กำลังสร้าง PDF…':'กำลังสร้างรูป PNG…',15000);
+    toast('กำลังเตรียมรูป…',30000);await ensureData(L.map(x=>x.p.imgId));
+    const files=[];for(const x of L){const r=await fetch(imgSrc(x.p.imgId));files.push({name:x.name,blob:await r.blob()})}
+    if(files.length===1){await saveFile(files[0].name,files[0].blob);return}
+    let ok=false;try{if(!window.JSZip)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+      const z=new JSZip();files.forEach(f=>z.file(f.name,f.blob));await saveFile(`${(a.who||'photos').replace(/[\\/:*?"<>|\s]+/g,'-')}_${a.date||''}.zip`,await z.generateAsync({type:'blob'}));ok=true}catch(e){}
+    if(!ok)for(const f of files){await saveFile(f.name,f.blob);await sleep(400)}
+  }catch(e){toast('ดาวน์โหลดไม่สำเร็จ: '+(e.message||e),5000)}finally{if(btn)btn.classList.remove('busy');toast('ดาวน์โหลดเสร็จแล้ว')}
+}
+async function accRunExport(day,st){
+  const gs=accFilterGroups(st.b,st.f);if(!gs.length){toast('ไม่พบห้องตามที่เลือก');return}
+  const parts=accSplit(gs,st.split);const pages=[]; // {html,w,h,land,name}
+  toast('กำลังเตรียมรูป…',30000);
+  const all=[];parts.forEach(p=>{const keys=accRoomsOf(p.groups).map(r=>r.key);const rq=st.det?accDetailBlocks(day,keys):[];p.rq=rq;rq.forEach(a=>[...(a.photos||[]),...(a.before||[]),...(a.after||[])].forEach(x=>all.push(x.imgId)))});
+  await ensureData(all);
+  parts.forEach((p,i)=>{
+    pages.push({html:accSnapHTML(day,{groups:p.groups,title:p.name}),land:true,name:(p.name||'ทั้งหมด')});
+    if(st.det)accDetailPages(day,p.rq,p.name).forEach((h,j)=>pages.push({html:h,land:false,name:(p.name||'ทั้งหมด')+' รายละเอียด'+(j+1)}))});
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:-9999px;top:0;z-index:-1';host.innerHTML=pages.map(p=>`<div class="accpg">${p.html}</div>`).join('');document.body.appendChild(host);
+  try{
+    toast(st.fmt==='pdf'?'กำลังสร้าง PDF…':'กำลังสร้างรูป PNG…',60000);
     if(!window.html2canvas)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-    if(document.fonts&&document.fonts.ready)await document.fonts.ready;await sleep(150);
-    const cv=await html2canvas(host.firstElementChild,{scale:2,backgroundColor:'#ffffff',logging:false});const name='RoomStatus_'+day;
-    if(kind==='png'){const blob=await new Promise(r=>cv.toBlob(r,'image/png'));await saveFile(name+'.png',blob);return}
-    if(!window.jspdf)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const land=cv.width>=cv.height;const pdf=new jspdf.jsPDF({unit:'mm',format:'a4',orientation:land?'l':'p',compress:true});
-    const W=land?297:210,H=land?210:297;const k=Math.min(W/cv.width,H/cv.height);const w=cv.width*k,h=cv.height*k;
-    pdf.addImage(cv.toDataURL('image/jpeg',.92),'JPEG',(W-w)/2,0,w,h,undefined,'FAST');await saveFile(name+'.pdf',pdf.output('blob'));
-  }catch(e){toast('ส่งออกไม่สำเร็จ: '+(e.message||e),5000)}finally{host.remove()}
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;await sleep(200);
+    const els=$$('.accpg',host);const base='RoomStatus_'+day;
+    if(st.fmt==='pdf'){
+      if(!window.jspdf)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      let pdf=null;
+      for(let i=0;i<els.length;i++){
+        const cv=await html2canvas(els[i].firstElementChild,{scale:2,backgroundColor:'#ffffff',logging:false});
+        const land=pages[i].land,W=land?297:210,H=land?210:297;
+        if(!pdf)pdf=new jspdf.jsPDF({unit:'mm',format:'a4',orientation:land?'l':'p',compress:true});else pdf.addPage('a4',land?'l':'p');
+        const k=Math.min(W/cv.width,H/cv.height);const w=cv.width*k,h=cv.height*k;
+        pdf.addImage(cv.toDataURL('image/jpeg',.9),'JPEG',(W-w)/2,0,w,h,undefined,'FAST');
+      }
+      await saveFile(base+'.pdf',pdf.output('blob'));return}
+    const files=[];
+    for(let i=0;i<els.length;i++){
+      const cv=await html2canvas(els[i].firstElementChild,{scale:2,backgroundColor:'#ffffff',logging:false});
+      const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+      files.push({name:`${base}_${String(i+1).padStart(2,'0')}_${pages[i].name.replace(/[\\/:*?"<>|\s]+/g,'-')}.png`,blob});
+    }
+    if(files.length===1){await saveFile(files[0].name,files[0].blob);return}
+    let zipped=false;
+    try{if(!window.JSZip)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+      const z=new JSZip();files.forEach(f=>z.file(f.name,f.blob));await saveFile(base+'.zip',await z.generateAsync({type:'blob'}));zipped=true}catch(e){}
+    if(!zipped){for(const f of files){await saveFile(f.name,f.blob);await sleep(400)}}
+  }catch(e){toast('ส่งออกไม่สำเร็จ: '+(e.message||e),5000)}finally{host.remove();toast('ส่งออกเสร็จแล้ว')}
 }
 let accSnapBusy=false;
 /* สร้างภาพสรุปให้เองเมื่อเปิดแอป/ข้ามวัน: วันก่อนหน้าที่ยังไม่มีภาพ (ย้อนหลังสูงสุด 31 วัน) + วันนี้หลัง 21:00 */
