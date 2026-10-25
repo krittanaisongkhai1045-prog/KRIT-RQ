@@ -4,10 +4,13 @@
 const CL_CATS=['งานสี','งานพื้น','งานผนัง','งานฝ้า','งานไฟฟ้า','งานสุขภัณฑ์','งานประตู-หน้าต่าง','งานโครงสร้าง','งานระบบ','อื่นๆ'];
 const CL_ST={open:['รอเคลม','bad'],sent:['ส่งเคลมแล้ว','warn'],done:['เคลมเสร็จ','good']};
 const clList=()=>(S.access||[]).filter(a=>a.kind==='claim');
+const clAmt=c=>{const r=parseFloat(c.rate);if(!(r>0))return 0;const q=parseFloat(c.qty);return r*(q>0?q:1)};
+const clMoney=n=>'฿'+(Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2});
+const clSum=l=>l.reduce((t,c)=>t+clAmt(c),0);
 const clNo=n=>'CL-'+String(n).padStart(3,'0');
 function clNew(){
   const mx=clList().reduce((m,c)=>Math.max(m,c.num||0),0);
-  return{id:'cl'+uid(),kind:'claim',num:mx+1,no:clNo(mx+1),date:todayISO(),building:UI.clb||'',floor:UI.clf||'',area:'',cat:UI.clc||'',against:UI.cla||'',desc:'',status:'open',photos:[],created:Date.now()};
+  return{id:'cl'+uid(),kind:'claim',num:mx+1,no:clNo(mx+1),date:todayISO(),building:UI.clb||'',floor:UI.clf||'',area:'',cat:UI.clc||'',against:UI.cla||'',desc:'',qty:'',unit:'',rate:'',status:'open',photos:[],created:Date.now()};
 }
 function clSave(c){S.access=S.access||[];if(!S.access.find(x=>x.id===c.id))S.access.push(c);save()}
 async function clAddPhotos(c,files){
@@ -35,6 +38,7 @@ function viewClaim(){
    ${can?`<button class="btn pri" data-act="clnew">＋ เพิ่มรายการเคลม</button><label class="btn" for="clmulti">📷 เพิ่มหลายรูป (1 รูป = 1 รายการ)</label><input id="clmulti" type="file" accept="image/*" multiple hidden>`:''}
    <button class="btn" data-act="clpdf">PDF</button></div>
    <div class="accsum"><div class="a-in"><b>${cnt('open')}</b><span>รอเคลม</span></div><div class="a-wait"><b>${cnt('sent')}</b><span>ส่งเคลมแล้ว</span></div><div class="a-done"><b>${cnt('done')}</b><span>เคลมเสร็จ</span></div><div class="a-none"><b>${all.length}</b><span>ทั้งหมด</span></div></div>
+   <div class="cltot">ยอดเคลมรวม${list.length!==all.length?' (ตามตัวกรอง)':''} <b>${clMoney(clSum(list))}</b><span class="small muted"> · รอเคลม ${clMoney(clSum(list.filter(c=>(c.status||'open')==='open')))} · ส่งแล้ว ${clMoney(clSum(list.filter(c=>c.status==='sent')))} · เสร็จ ${clMoney(clSum(list.filter(c=>c.status==='done')))}</span></div>
    <div class="clbar"><input type="search" id="clq" placeholder="ค้นหา เลขที่ / พื้นที่ / รายละเอียด" value="${esc(UI.clq||'')}">
     <select id="clfb" aria-label="อาคาร">${clOpts(clUniq('building'),UI.clb,'ทุกอาคาร')}</select>
     <select id="clff" aria-label="ชั้น">${clOpts(clUniq('floor'),UI.clf,'ทุกชั้น')}</select>
@@ -49,13 +53,13 @@ function viewClaim(){
 function clBody(list,v){
   let h='';
   for(const g of clGroups(list)){
-    if(g.name)h+=`<div class="ghead l1"><b>${esc(g.name)}</b><span class="small muted">${g.list.length} รายการ</span></div>`;
-    if(v==='table')h+=`<div class="qtw"><table class="qtv clt"><thead><tr><th>ลำดับ</th><th>อาคาร / ชั้น / พื้นที่</th><th>รูป</th><th>รายละเอียด</th><th>หมวด</th><th>เคลมใคร</th><th>สถานะ</th><th>วันที่</th></tr></thead><tbody>
-     ${g.list.map(c=>{const p=(c.photos||[])[0];return`<tr data-act="clopen" data-id="${c.id}"><td><b>${esc(c.no)}</b></td><td>${esc([c.building&&'อาคาร '+c.building,c.floor&&'ชั้น '+c.floor,c.area].filter(Boolean).join(' · '))}</td><td class="dph">${p?`<div class="dl-im">${qcThumb(p)}</div>${(c.photos.length>1)?`<div class="small muted">+${c.photos.length-1} รูป</div>`:''}`:'—'}</td><td>${esc(c.desc||'')}</td><td>${esc(c.cat||'-')}</td><td>${esc(c.against||'-')}</td><td>${chip(CL_ST[c.status||'open'][0],CL_ST[c.status||'open'][1])}</td><td class="mono small">${esc(c.date||'')}</td></tr>`}).join('')}</tbody></table></div>`;
+    if(g.name)h+=`<div class="ghead l1"><b>${esc(g.name)}</b><span class="small muted">${g.list.length} รายการ</span>${clSum(g.list)?`<span class="chip warn">${clMoney(clSum(g.list))}</span>`:''}</div>`;
+    if(v==='table')h+=`<div class="qtw"><table class="qtv clt"><thead><tr><th>ลำดับ</th><th>อาคาร / ชั้น / พื้นที่</th><th>รูป</th><th>รายละเอียด</th><th>หมวด</th><th>เคลมใคร</th><th>สถานะ</th><th>วันที่</th><th>ราคาเคลม</th></tr></thead><tbody>
+     ${g.list.map(c=>{const p=(c.photos||[])[0];return`<tr data-act="clopen" data-id="${c.id}"><td><b>${esc(c.no)}</b></td><td>${esc([c.building&&'อาคาร '+c.building,c.floor&&'ชั้น '+c.floor,c.area].filter(Boolean).join(' · '))}</td><td class="dph">${p?`<div class="dl-im">${qcThumb(p)}</div>${(c.photos.length>1)?`<div class="small muted">+${c.photos.length-1} รูป</div>`:''}`:'—'}</td><td>${esc(c.desc||'')}</td><td>${esc(c.cat||'-')}</td><td>${esc(c.against||'-')}</td><td>${chip(CL_ST[c.status||'open'][0],CL_ST[c.status||'open'][1])}</td><td class="mono small">${esc(c.date||'')}</td><td class="mono">${clAmt(c)?clMoney(clAmt(c))+(c.rate&&(parseFloat(c.qty)>0)?`<div class="small muted">${esc(c.qty)} ${esc(c.unit||'')} × ${clMoney(parseFloat(c.rate))}</div>`:''):'—'}</td></tr>`}).join('')}</tbody></table></div>`;
     else h+=`<div class="accl">${g.list.map(c=>{const p=(c.photos||[])[0];return`<div class="acard" data-act="clopen" data-id="${c.id}"><div class="th">${p?qcThumb(p):'<i>ไม่มีรูป</i>'}</div><div class="bd"><div class="row" style="gap:6px"><b>${esc(c.no)}</b>${chip(CL_ST[c.status||'open'][0],CL_ST[c.status||'open'][1])}</div>
      <div class="small">${esc([c.building&&'อาคาร '+c.building,c.floor&&'ชั้น '+c.floor,c.area].filter(Boolean).join(' · ')||'-')}</div>
      <div class="small muted">${esc(c.cat||'ไม่ระบุหมวด')} → ${esc(c.against||'ไม่ระบุผู้ถูกเคลม')}</div>
-     ${c.desc?`<div class="small">${esc(c.desc.slice(0,80))}</div>`:''}<div class="small muted mono">${esc(c.date||'')}${(c.photos||[]).length?` · ${c.photos.length} รูป`:''}</div></div></div>`}).join('')}</div>`;
+     ${c.desc?`<div class="small">${esc(c.desc.slice(0,80))}</div>`:''}${clAmt(c)?`<div class="clamt">${clMoney(clAmt(c))}${parseFloat(c.qty)>0?`<span class="small muted"> · ${esc(c.qty)} ${esc(c.unit||'')} × ${clMoney(parseFloat(c.rate))}</span>`:''}</div>`:''}<div class="small muted mono">${esc(c.date||'')}${(c.photos||[]).length?` · ${c.photos.length} รูป`:''}</div></div></div>`}).join('')}</div>`;
   }
   return h;
 }
@@ -77,13 +81,18 @@ function clEdit(c,isNew){
       <label class="f">วันที่<input type="date" data-cf="date" value="${esc(c.date||'')}" ${ro?'disabled':''}></label>
       <label class="f">สถานะ<select data-cf="status" ${ro?'disabled':''}>${Object.entries(CL_ST).map(([k,x])=>`<option value="${k}" ${(c.status||'open')===k?'selected':''}>${x[0]}</option>`).join('')}</select></label>
      </div>
+     <div class="f" style="margin-top:10px"><b class="small">เรทราคาที่เคลม</b>
+      <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px"><label class="f">จำนวน<input type="number" inputmode="decimal" min="0" step="any" data-cf="qty" value="${esc(c.qty||'')}" ${ro?'disabled':''} placeholder="1"></label>
+       <label class="f">หน่วย<input type="text" list="cl-du" data-cf="unit" value="${esc(c.unit||'')}" ${ro?'disabled':''} placeholder="ตร.ม."></label>
+       <label class="f">เรท (บาท/หน่วย)<input type="number" inputmode="decimal" min="0" step="any" data-cf="rate" value="${esc(c.rate||'')}" ${ro?'disabled':''} placeholder="0"></label></div>
+      <div class="clamt" id="cl-total" style="margin-top:6px">รวมเป็นเงิน ${clMoney(clAmt(c))}</div></div>
      <label class="f" style="margin-top:10px">รายละเอียดที่เคลม<textarea rows="3" data-cf="desc" ${ro?'disabled':''}>${esc(c.desc||'')}</textarea></label>
-     ${dl('cl-dc',[...new Set([...CL_CATS,...clUniq('cat')])])}${dl('cl-da',clUniq('against'))}${dl('cl-db',clUniq('building'))}${dl('cl-df',clUniq('floor'))}
+     ${dl('cl-du',['ตร.ม.','ม.','ชุด','ชิ้น','จุด','ห้อง','เหมา'])}${dl('cl-dc',[...new Set([...CL_CATS,...clUniq('cat')])])}${dl('cl-da',clUniq('against'))}${dl('cl-db',clUniq('building'))}${dl('cl-df',clUniq('floor'))}
      ${ro?'':`<div class="row" style="margin-top:14px;justify-content:flex-end">${isNew?'':'<button class="btn bad" data-a="del">ลบ</button>'}<button class="btn pri" data-a="save">บันทึก</button></div>`}`;
   };
   draw();
   const finish=()=>{o.remove();clRepaint()};
-  o.addEventListener('input',e=>{const t=e.target;if(ro)return;if(t.dataset.cf)c[t.dataset.cf]=t.value;if(t.dataset.pcap){const p=(c.photos||[]).find(x=>x.id===t.dataset.pcap);if(p)p.caption=t.value}});
+  o.addEventListener('input',e=>{const t=e.target;if(ro)return;if(t.dataset.cf){c[t.dataset.cf]=t.value;const tt=$('#cl-total',o);if(tt)tt.textContent='รวมเป็นเงิน '+clMoney(clAmt(c))}if(t.dataset.pcap){const p=(c.photos||[]).find(x=>x.id===t.dataset.pcap);if(p)p.caption=t.value}});
   o.addEventListener('change',async e=>{const t=e.target;if(ro)return;
     if(t.dataset.clph){const fs=[...t.files];t.value='';if(fs.length){toast('กำลังเพิ่มรูป…',20000);await clAddPhotos(c,fs);draw();if(!isNew)clSave(c)}}});
   o.addEventListener('click',e=>{
@@ -111,9 +120,9 @@ async function exportCL(){
         const rows=g.list.slice(k*CL_ROWS,(k+1)*CL_ROWS);
         pages.push(`<div style="padding:28px 32px;font-family:Sarabun,sans-serif;color:#111;width:1123px;height:794px;box-sizing:border-box;background:#fff"><div style="font:700 22px Sarabun,sans-serif">รายการงานเคลม</div>
          <div style="display:flex;gap:24px;font-size:13px;margin:6px 0 10px"><span><b>โครงการ</b> ${esc(P.name||'')}</span>${g.name?`<span><b>${esc(g.name)}</b></span>`:''}<span style="margin-left:auto">วันที่ ${esc(todayISO())} · หน้า ${k+1}/${np}</span></div>
-         <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed"><colgroup><col style="width:70px"><col style="width:170px"><col style="width:190px"><col><col style="width:110px"><col style="width:130px"><col style="width:90px"></colgroup>
-         <thead><tr>${['เลขที่','อาคาร/ชั้น/พื้นที่','รูป','รายละเอียด','หมวด','เคลมใคร','สถานะ'].map(x=>`<th style="border:1px solid #333;background:#eee;padding:5px">${x}</th>`).join('')}</tr></thead><tbody>
-         ${rows.map(c=>{const p=(c.photos||[])[0];return`<tr style="height:118px"><td style="border:1px solid #333;padding:5px;text-align:center"><b>${esc(c.no)}</b><br><span style="font-size:10px">${esc(c.date||'')}</span></td><td style="border:1px solid #333;padding:5px">${esc([c.building&&'อาคาร '+c.building,c.floor&&'ชั้น '+c.floor,c.area].filter(Boolean).join(' · '))}</td><td style="border:1px solid #333;padding:3px;text-align:center">${p?`<div style="width:180px;height:108px;margin:auto">${qcThumb(p)}</div>${c.photos.length>1?`<div style="font-size:10px">+${c.photos.length-1} รูป</div>`:''}`:'—'}</td><td style="border:1px solid #333;padding:5px;vertical-align:top">${esc(c.desc||'')}</td><td style="border:1px solid #333;padding:5px">${esc(c.cat||'')}</td><td style="border:1px solid #333;padding:5px">${esc(c.against||'')}</td><td style="border:1px solid #333;padding:5px;text-align:center">${esc(CL_ST[c.status||'open'][0])}</td></tr>`}).join('')}</tbody></table></div>`);
+         <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed"><colgroup><col style="width:70px"><col style="width:170px"><col style="width:190px"><col><col style="width:110px"><col style="width:130px"><col style="width:90px"><col style="width:110px"></colgroup>
+         <thead><tr>${['เลขที่','อาคาร/ชั้น/พื้นที่','รูป','รายละเอียด','หมวด','เคลมใคร','สถานะ','ราคาเคลม'].map(x=>`<th style="border:1px solid #333;background:#eee;padding:5px">${x}</th>`).join('')}</tr></thead><tbody>
+         ${rows.map(c=>{const p=(c.photos||[])[0];return`<tr style="height:118px"><td style="border:1px solid #333;padding:5px;text-align:center"><b>${esc(c.no)}</b><br><span style="font-size:10px">${esc(c.date||'')}</span></td><td style="border:1px solid #333;padding:5px">${esc([c.building&&'อาคาร '+c.building,c.floor&&'ชั้น '+c.floor,c.area].filter(Boolean).join(' · '))}</td><td style="border:1px solid #333;padding:3px;text-align:center">${p?`<div style="width:180px;height:108px;margin:auto">${qcThumb(p)}</div>${c.photos.length>1?`<div style="font-size:10px">+${c.photos.length-1} รูป</div>`:''}`:'—'}</td><td style="border:1px solid #333;padding:5px;vertical-align:top">${esc(c.desc||'')}</td><td style="border:1px solid #333;padding:5px">${esc(c.cat||'')}</td><td style="border:1px solid #333;padding:5px">${esc(c.against||'')}</td><td style="border:1px solid #333;padding:5px;text-align:center">${esc(CL_ST[c.status||'open'][0])}</td><td style="border:1px solid #333;padding:5px;text-align:right">${clAmt(c)?clMoney(clAmt(c))+(parseFloat(c.qty)>0?`<div style="font-size:10px;color:#555">${esc(c.qty)} ${esc(c.unit||'')} × ${clMoney(parseFloat(c.rate))}</div>`:''):'—'}</td></tr>`}).join('')}</tbody></table>${k===np-1?`<div style="text-align:right;font-size:14px;margin-top:8px"><b>รวม${g.name?' '+esc(g.name):''}: ${clMoney(clSum(g.list))}</b>${clSum(list)!==clSum(g.list)?` · ยอดรวมทั้งหมด ${clMoney(clSum(list))}`:''}</div>`:''}</div>`);
       }
     }
     if(!window.html2canvas)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');

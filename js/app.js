@@ -22,6 +22,7 @@ function onMainClick(e){
   const tb=e.target.closest('[data-tab]');if(tb){UI.tab=tb.dataset.tab;render();return}
   const a=e.target.closest('[data-act]');if(!a)return;
   const act=a.dataset.act,id=a.dataset.id;const r=UI.route==='req'?curReq():null;
+  if(LISTACT[act]){LISTACT[act](a,id,e);return}
   if(QCACT[act]){QCACT[act](a,id,e);return}
   if(ACCACT[act]){ACCACT[act](a,id,e);return}
   if(CLACT[act]){CLACT[act](a,id,e);return}

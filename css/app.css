@@ -447,3 +447,13 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus
 }
 
 .dragon{display:none!important}
+
+.cltot{margin:6px 2px 4px;font-size:14px}.cltot b{font:700 20px var(--f-head,inherit);color:var(--accent)}
+.clamt{font-weight:700;color:var(--accent)}
+@media(max-width:820px){.qtv.clt td:nth-child(9){grid-column:span 1}}
+/* ===== รายการส่งตรวจ: list ย่อ/ขยายได้ ===== */
+.ghead.gtg{cursor:pointer;-webkit-user-select:none;user-select:none}.ghead .chev{display:inline-block;color:var(--muted);transition:transform .25s cubic-bezier(.34,1.56,.64,1);width:14px}
+.ghead:not(.shut) .chev,.chain.open .chev{transform:rotate(90deg);color:var(--accent)}
+.chain .chainhead{cursor:pointer}.chain:not(.open) .crow{display:none}
+.chain .chev{display:inline-block;color:var(--muted);transition:transform .25s cubic-bezier(.34,1.56,.64,1);width:14px;flex:none}
+.listbar{display:flex;gap:8px;margin:4px 0 6px}

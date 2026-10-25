@@ -55,7 +55,8 @@ function chip(t,c){return`<span class="chip ${c||''}">${esc(t)}</span>`}
 function chainBlock(root,match){
   const reqs=chainReqs(root.id);if(!reqs.some(match))return'';
   const cs=chainState(root.id);const can=cs.open>0;
-  let h=`<div class="chain"><div class="chainhead">${chip(cs.t,cs.k)}<span class="muted">${esc(root.workType)} · ${esc(root.location)}</span><span style="margin-left:auto" class="row">${can?`<button class="btn sm pri" data-act="newclose" data-id="${root.id}">＋ สร้างรอบส่งซ้ำ (${cs.open} จุด)</button>`:''}<button class="btn sm" data-act="delchain" data-id="${root.id}">ลบชุดนี้</button></span></div>`;
+  const op=!!(UI.chOpen&&UI.chOpen[root.id]);
+  let h=`<div class="chain ${op?'open':''}"><div class="chainhead" data-act="chtog" data-id="${root.id}"><span class="chev">▸</span>${chip(cs.t,cs.k)}<span class="muted">${esc(root.workType)} · ${esc(root.location)}</span><span style="margin-left:auto" class="row">${can?`<button class="btn sm pri" data-act="newclose" data-id="${root.id}">＋ สร้างรอบส่งซ้ำ (${cs.open} จุด)</button>`:''}<button class="btn sm" data-act="delchain" data-id="${root.id}">ลบชุดนี้</button></span></div>`;
   for(const r of reqs){
     const vis=visibleDefects(r).length;
     h+=`<div class="crow ${r.type==='CLOSE'?'sub':''}" data-act="openreq" data-id="${r.id}"><div><div class="no">${esc(r.no)}</div>${chip(r.type==='OPEN'?kindLabel(r):kindLabel(r)+' รอบ '+r.round,r.type==='OPEN'?'open':'close')}</div><div class="ttl"><div>${esc(r.workText||'—')}</div><div class="small muted">${fmtDate(r.date)} · ${esc(r.location)} · รูป ${r.photos.length} · ${r.type==='CLOSE'?`ตรวจซ้ำ ${(r.scope||[]).length} จุด`:`พบ DEFECT ${vis} จุด`}</div></div><div class="row">${r.sent?chip('ส่งแล้ว','warn'):chip('ร่าง')}${r.result==='approved'?chip('Approved','good'):r.result==='disapproved'?chip('Disapproved','bad'):r.result==='other'?chip('Other'):''}</div></div>`}
@@ -89,11 +90,19 @@ function viewList(){
   const tree=new Map();
   for(const rt of vis){const ks=groupKeys(rt,g);let node=tree;ks.forEach((k,i)=>{if(!node.has(k))node.set(k,{n:new Map(),items:[]});const e=node.get(k);if(i===ks.length-1)e.items.push(rt);node=e.n});if(!ks.length){if(!tree.has(''))tree.set('',{n:new Map(),items:[]});tree.get('').items.push(rt)}}
   const sum=n=>{let c=0,o=0;const walk=e=>{e.items.forEach(rt=>{c++;o+=chainState(rt.id).open});e.n.forEach(walk)};walk(n);return[c,o]};
-  const out=(map,lvl)=>{let x='';[...map.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true})).forEach(k=>{const e=map.get(k);const[c,o]=sum(e);
-    if(k!=='')x+=`<div class="ghead l${lvl}"><b>${esc(k)}</b><span class="small muted">${c} ชุดงาน</span>${o?`<span class="chip bad">ค้างแก้ ${o} จุด</span>`:`<span class="chip good">ไม่มี DEFECT ค้าง</span>`}</div>`;
-    x+=e.items.map(rt=>chainBlock(rt,match)).join('')+out(e.n,lvl+1)});return x};
+  const out=(map,lvl,pre)=>{pre=pre||'';let x='';[...map.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true})).forEach(k=>{const e=map.get(k);const[c,o]=sum(e);
+    const gk=pre+'›'+k;const shut=!!(UI.gShut&&UI.gShut[gk]);
+    if(k!=='')x+=`<div class="ghead gtg l${lvl} ${shut?'shut':''}" data-act="gtog" data-id="${esc(gk)}"><span class="chev">▸</span><b>${esc(k)}</b><span class="small muted">${c} ชุดงาน</span>${o?`<span class="chip bad">ค้างแก้ ${o} จุด</span>`:`<span class="chip good">ไม่มี DEFECT ค้าง</span>`}</div>`;
+    if(!shut)x+=e.items.map(rt=>chainBlock(rt,match)).join('')+out(e.n,lvl+1,gk)});return x};
+  const anyOpen=vis.some(rt=>UI.chOpen&&UI.chOpen[rt.id]);
+  h+=`<div class="listbar"><button class="btn sm" data-act="listall" data-id="${anyOpen?'0':'1'}">${anyOpen?'ย่อทั้งหมด':'ขยายทั้งหมด'}</button></div>`;
   return h+out(tree,1);
 }
+const LISTACT={
+  gtog(a,id){UI.gShut=UI.gShut||{};UI.gShut[id]=!UI.gShut[id];render()},
+  chtog(a,id){UI.chOpen=UI.chOpen||{};UI.chOpen[id]=!UI.chOpen[id];render()},
+  listall(a,id){UI.chOpen=UI.chOpen||{};UI.gShut={};S.requests.filter(r=>r.type==='OPEN').forEach(r=>{UI.chOpen[r.id]=id==='1'});render()},
+};
 
 /* ========= requests: create ========= */
 function newOpen(num0,kind){
