@@ -457,3 +457,12 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus
 .chain .chainhead{cursor:pointer}.chain:not(.open) .crow{display:none}
 .chain .chev{display:inline-block;color:var(--muted);transition:transform .25s cubic-bezier(.34,1.56,.64,1);width:14px;flex:none}
 .listbar{display:flex;gap:8px;margin:4px 0 6px}
+
+/* ตัวเลือกแบบสำหรับปักหมุด */
+.pplist{max-height:56vh;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.ppg{font-weight:700;margin:8px 2px 2px;font-size:13px;color:var(--muted)}
+.pickrow.ppr{display:flex;align-items:center;gap:10px;text-align:left;padding:8px;width:100%}
+.ppt{width:64px;height:48px;border-radius:8px;overflow:hidden;background:var(--surface2);flex:none;display:block}.ppt img{width:100%;height:100%;object-fit:cover;display:block}
+
+.qpm{display:grid;grid-template-columns:1fr;gap:8px}.qpmb{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--surface2);color:var(--fg)}
+.qpmb.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px rgba(255,122,26,.25)}
