@@ -12,6 +12,9 @@ function newQC(loc,num0){
   S.defects.push(d);save();return d;
 }
 const libById=id=>S.library.find(l=>l.id===id);
+const THUMB=new Map();
+const qcImg=p=>{if(!p)return'';const id=p.imgId;const ov=(p.shapes||[]).length?annotatedSvg('',p.w,p.h,p.shapes,[]).replace(/<image[^>]*\/>/,'').replace(/style="[^"]*"/,''):'';
+  return`<span class="qthw"><img class="qth" data-th="${esc(id)}" src="${THUMB.get(id)||imgSrc(id)}"${String(imgSrc(id)).startsWith("http")?" crossorigin=anonymous":""} loading="lazy" decoding="async" alt="">${ov}</span>`};
 const qcThumb=p=>p?annotatedSvg(imgSrc(p.imgId),p.w,p.h,p.shapes,[]):'';
 /* ประเภทงานของ DEFECT → ไอคอน (จับจากคำใน Scope งาน / ประเภท) */
 const QCI=p=>`<svg viewBox="0 0 24 24">${p}</svg>`;
@@ -67,7 +70,7 @@ function viewQC(){
 function qcCard(d){
   const st=QC_ST[d.status||'open'];const b=(d.before||[])[0],a=(d.after||[])[0];
   return`<div class="card" style="cursor:pointer" data-act="qcopen" data-id="${d.id}">
-   <div class="ba"><div class="bx"><span class="tg">BEFORE${(d.before||[]).length>1?' ×'+d.before.length:''}</span>${b?qcThumb(b):'<i>ไม่มีรูป</i>'}</div><div class="bx"><span class="tg af">AFTER${(d.after||[]).length>1?' ×'+d.after.length:''}</span>${a?qcThumb(a):'<i>ยังไม่มีรูป</i>'}</div></div>
+   <div class="ba"><div class="bx"><span class="tg">BEFORE${(d.before||[]).length>1?' ×'+d.before.length:''}</span>${b?qcImg(b):'<i>ไม่มีรูป</i>'}</div><div class="bx"><span class="tg af">AFTER${(d.after||[]).length>1?' ×'+d.after.length:''}</span>${a?qcImg(a):'<i>ยังไม่มีรูป</i>'}</div></div>
    <div class="body"><div class="row"><b class="mono">${esc(d.code)}</b>${chip(st[0],st[1])}<span class="small muted" style="margin-left:auto">${esc(fmtDate(d.found))}</span></div>
    <div class="small">${esc([d.building&&'อาคาร '+d.building,d.area,d.surface,d.face].filter(Boolean).join(' · '))||'<span class="muted">ยังไม่ระบุตำแหน่ง</span>'}</div>
    <div class="small muted">${esc(d.type||'')}${d.fix?' → '+esc(d.fix):''}</div>
@@ -86,7 +89,7 @@ function editQC(d,ctx){
   const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro=ro?'1':'0';const box=$('.box',o);
   const photoCol=(stage,title,cls)=>{const L=d[stage]||[];
     return`<div class="qcol"><div class="row" style="margin-bottom:6px"><b class="tg ${cls}" style="position:static">${title}</b><span class="small muted">${L.length} รูป</span>${ro?'':`<label class="btn sm" for="qc-${stage}" style="margin-left:auto">📷 ถ่าย</label><input id="qc-${stage}" data-qstage="${stage}" type="file" accept="image/*" capture="environment" hidden><label class="btn sm" for="qf-${stage}">＋ เพิ่มรูป</label><input id="qf-${stage}" data-qstage="${stage}" type="file" accept="image/*" multiple hidden>`}</div>
-     ${L.length?`<div class="qph">${L.map(p=>`<div class="qp"><div class="thumb" data-q="open" data-st="${stage}" data-id="${p.id}">${qcThumb(p)}</div><input type="text" data-qp="${stage}:${p.id}" value="${esc(p.caption)}" placeholder="คำอธิบาย" ${ro?'disabled':''}>${ro?'':`<button class="btn sm bad" data-q="delp" data-st="${stage}" data-id="${p.id}">ลบ</button>`}</div>`).join('')}</div>`:`<div class="empty small">${stage==='before'?'ยังไม่มีรูปก่อนแก้':'ยังไม่มีรูปหลังแก้'}</div>`}</div>`};
+     ${L.length?`<div class="qph">${L.map(p=>`<div class="qp"><div class="thumb" data-q="open" data-st="${stage}" data-id="${p.id}">${qcImg(p)}</div><input type="text" data-qp="${stage}:${p.id}" value="${esc(p.caption)}" placeholder="คำอธิบาย" ${ro?'disabled':''}>${ro?'':`<button class="btn sm bad" data-q="delp" data-st="${stage}" data-id="${p.id}">ลบ</button>`}</div>`).join('')}</div>`:`<div class="empty small">${stage==='before'?'ยังไม่มีรูปก่อนแก้':'ยังไม่มีรูปหลังแก้'}</div>`}</div>`};
   function draw(){
     const st=d.status||'open';const lib=d.loc&&libById(d.loc.libId);
     box.innerHTML=`<div class="row" style="margin-bottom:12px"><h3 style="margin-right:auto">QC DEFECT <span class="mono">${esc(d.code)}</span> ${chip(QC_ST[st][0],QC_ST[st][1])}</h3><button class="btn pri" data-q="close">เสร็จ</button></div>
@@ -437,7 +440,7 @@ function qcTablePages(list){
 function qcTableEdit(ds){
   let h='';
   const ph=(d,st,can)=>{const L=d[st]||[];const p=L[0];
-    return`<div class="ph">${p?`<div class="im" data-act="qcopen" data-id="${d.id}" title="แตะเพื่อดู/ลบรูป">${qcThumb(p)}</div>`:'<i class="muted">—</i>'}${L.length>1?`<span class="small muted">+${L.length-1} รูป</span>`:''}
+    return`<div class="ph">${p?`<div class="im" data-act="qcopen" data-id="${d.id}" title="แตะเพื่อดู/ลบรูป">${qcImg(p)}</div>`:'<i class="muted">—</i>'}${L.length>1?`<span class="small muted">+${L.length-1} รูป</span>`:''}
      ${can?`<div class="row"><label class="btn sm" for="tp-${st}-${d.id}">🖼 เพิ่มรูป</label><input id="tp-${st}-${d.id}" data-qtph="${st}:${d.id}" type="file" accept="image/*" multiple hidden></div>`:''}</div>`};
   for(const g of qcGroups(ds)){
     h+=`<div class="ghead l1"><b>${g.building?'อาคาร '+esc(g.building):'ไม่ระบุอาคาร'}${g.floor?' · ชั้น '+esc(g.floor):''}</b><span class="small muted">${g.list.length} จุด · พิมพ์ในช่องได้เลย บันทึกอัตโนมัติ</span></div>
@@ -459,7 +462,7 @@ function qcTableView(ds,act){act=act||'qcopen';
   for(const g of qcGroups(ds)){
     h+=`<div class="ghead l1"><b>${g.building?'อาคาร '+esc(g.building):'ไม่ระบุอาคาร'}${g.floor?' · ชั้น '+esc(g.floor):''}</b><span class="small muted">${g.list.length} จุด</span></div>
      <div class="qtw"><table class="qtv"><thead><tr><th>ลำดับ</th><th>พื้นที่</th><th>ภาพก่อน</th><th>ภาพหลัง</th><th>รายละเอียด</th><th>Scope งาน</th><th>วันที่ตรวจ</th><th>กำหนดเสร็จ</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>ผู้ตรวจ</th><th>ผู้รับผิดชอบ</th><th>หมายเหตุ</th></tr></thead><tbody>
-     ${g.list.map((d,i)=>{const pf=qcPass(d);const b=(d.before||[])[0],a=(d.after||[])[0];return`<tr data-act="${act}" data-id="${d.id}"><td><b>${i+1}</b><div class="mono small">${esc(d.code)}</div></td><td>${qcAreaTxt(d).map(esc).join('<br>')||'<span class="muted">—</span>'}</td><td class="dph">${b?`<div class="im">${qcThumb(b)}</div>`:'<i>—</i>'}</td><td class="dph">${a?`<div class="im">${qcThumb(a)}</div>`:'<i>—</i>'}</td><td>${qcDesc(d).map(esc).join('<br>')}</td><td>${esc(qcScope(d))}</td><td>${esc(fmtDate(d.found)||'')}</td><td>${esc(fmtDate(d.due)||'')}</td><td class="c">${pf==='p'?'✓':''}</td><td class="c">${pf==='f'?'✓':''}</td><td>${esc(d.inspector||'')}</td><td>${esc(d.owner||'')}</td><td>${esc(d.note||'')}</td></tr>`}).join('')}</tbody></table></div>`;
+     ${g.list.map((d,i)=>{const pf=qcPass(d);const b=(d.before||[])[0],a=(d.after||[])[0];return`<tr data-act="${act}" data-id="${d.id}"><td><b>${i+1}</b><div class="mono small">${esc(d.code)}</div></td><td>${qcAreaTxt(d).map(esc).join('<br>')||'<span class="muted">—</span>'}</td><td class="dph">${b?`<div class="im">${qcImg(b)}</div>`:'<i>—</i>'}</td><td class="dph">${a?`<div class="im">${qcImg(a)}</div>`:'<i>—</i>'}</td><td>${qcDesc(d).map(esc).join('<br>')}</td><td>${esc(qcScope(d))}</td><td>${esc(fmtDate(d.found)||'')}</td><td>${esc(fmtDate(d.due)||'')}</td><td class="c">${pf==='p'?'✓':''}</td><td class="c">${pf==='f'?'✓':''}</td><td>${esc(d.inspector||'')}</td><td>${esc(d.owner||'')}</td><td>${esc(d.note||'')}</td></tr>`}).join('')}</tbody></table></div>`;
   }
   return h;
 }
@@ -560,7 +563,7 @@ async function qcChange(t){
 @media(max-width:560px){.srow{flex-direction:column}.srow .sth{flex:none;width:100%;height:150px}}
 [hidden]{display:none!important}
 .ba{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--line)}
-.ba .bx{position:relative;aspect-ratio:4/3;background:var(--surface2);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.ba .bx{width:auto;height:auto;border:0;line-height:normal;position:relative;aspect-ratio:4/3;background:var(--surface2);overflow:hidden;display:flex;align-items:center;justify-content:center}
 .ba .bx svg{width:100%;height:100%;display:block}.ba .bx i{font-size:12px;color:var(--muted);font-style:normal}
 .tg{position:absolute;left:6px;top:6px;z-index:1;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#e03131;color:#fff;letter-spacing:.03em}
 .tg.af{background:#2f9e44}

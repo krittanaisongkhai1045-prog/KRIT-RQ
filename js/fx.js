@@ -39,3 +39,20 @@ new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
 window.addEventListener('resize',()=>{lastPill=null;run()});
 document.addEventListener('DOMContentLoaded',run);run();
 })();
+
+/* ===== thumbnails: ย่อรูปเล็กเก็บไว้ ให้หน้า QC โหลดเร็ว ===== */
+(function(){
+  document.addEventListener('load',e=>{
+    const im=e.target;if(!im||im.tagName!=='IMG'||!im.dataset||!im.dataset.th)return;
+    const id=im.dataset.th;if(typeof THUMB==='undefined'||THUMB.has(id)||im.src.startsWith('data:image/jpeg;th'))return;
+    const w=im.naturalWidth,h=im.naturalHeight;if(!w||w<=520)return;
+    try{const k=480/Math.max(w,h),c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      const u=c.toDataURL('image/jpeg',.72);
+      THUMB.set(id,u);if(typeof obPut==='function'&&MODE.kind==='cloud')obPut('cache','th:'+id,u);
+      document.querySelectorAll('img[data-th]').forEach(x=>{if(x.dataset.th===id)x.src=u});
+    }catch(_){/* cross-origin → ข้าม */}
+  },true);
+  setTimeout(async()=>{try{if(typeof obAll!=='function'||typeof THUMB==='undefined')return;
+    for(const[k,v]of await obAll('cache'))if(String(k).startsWith('th:'))THUMB.set(k.slice(3),v)}catch(_){}},1500);
+})();

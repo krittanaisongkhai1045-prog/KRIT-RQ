@@ -466,3 +466,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus
 
 .qpm{display:grid;grid-template-columns:1fr;gap:8px}.qpmb{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--surface2);color:var(--fg)}
 .qpmb.on{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px rgba(255,122,26,.25)}
+.qthw{position:absolute;inset:0;display:block}
+.qph .thumb,.dl-im,.ph .im,.card .thumb{position:relative}.dl-im{overflow:hidden}
+.qthw img.qth{width:100%;height:100%;object-fit:contain;display:block;background:var(--surface2)}
+.qthw svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
