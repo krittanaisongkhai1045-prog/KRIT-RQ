@@ -470,27 +470,52 @@ function qcPlanPages(list,opt){
   return out;
 }
 /* หน้าต่างเลือกชุดเอกสาร PDF: ตาราง + หน้าแบบ (รอบ 1 OPEN ถือไปตรวจ / รอบ 2 CLOSE พร้อมหมุดและรูป) */
+/* ---------- รอบตรวจ QC ที่บันทึกไว้ (แสดงหน้าแรก) เก็บใน S.access kind:'qcround' ---------- */
+const QR_MODE={table:['ตาราง',''],open:['รอบ 1 · OPEN','warn'],close:['รอบ 2 · CLOSE','good']};
+const qrDefTitle=m=>({table:'QC DEFECTS LIST',open:'QC รอบ 1 · OPEN',close:'QC รอบ 2 · CLOSE'}[m]||'QC');
+const qcRounds=()=>(S.access||[]).filter(a=>a.kind==='qcround').sort((a,b)=>(b.created||0)-(a.created||0));
+function qrSave(o){
+  S.access=S.access||[];const n=qcRounds().reduce((m,r)=>Math.max(m,+(String(r.no).match(/(\d+)$/)||[])[1]||0),0)+1;
+  const f=[UI.qb&&'อาคาร '+UI.qb,UI.qs,qxActive()?'ตัวกรอง '+qxActive():''].filter(Boolean).join(' · ');
+  const r={id:'qr'+uid(),kind:'qcround',no:'QCR-'+String(n).padStart(2,'0'),title:o.title,mode:o.mode,view:o.view,date:todayISO(),defectIds:o.list.map(d=>d.id),plan:o.plan||null,filter:f,created:Date.now(),by:MODE.email||''};
+  S.access.push(r);save();return r;
+}
+function qcRoundsHTML(){
+  const L=qcRounds();if(!L.length)return'';const open=UI.qrAll;const shown=open?L:L.slice(0,4);
+  return`<h2 class="mh-sec">รอบตรวจ QC <span class="small muted">${L.length} รอบ</span></h2><div class="qrl">${shown.map(r=>{
+    const ds=(r.defectIds||[]).map(defectById).filter(Boolean);const op=ds.filter(d=>d.status!=='closed').length;const m=QR_MODE[r.mode]||QR_MODE.table;
+    return`<div class="qr"><div class="row" style="gap:6px"><b class="mono">${esc(r.no)}</b><b style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</b><span class="chip ${m[1]}">${m[0]}</span></div>
+     <div class="small muted">${esc(fmtDate(r.date))} · ${ds.length} รายการ${r.plan?` · ${(r.plan.libIds||[]).length} แบบ`:''}${r.filter?' · '+esc(r.filter):''}</div>
+     <div class="row" style="gap:6px;margin-top:6px"><span class="chip ${op?'bad':'good'}">${op?'ค้าง '+op:'ปิดครบ'}</span><button class="btn sm pri" data-act="qrpdf" data-id="${r.id}" style="margin-left:auto">⬇ PDF</button>${canCreate()?`<button class="btn sm bad" data-act="qrdel" data-id="${r.id}">ลบ</button>`:''}</div></div>`}).join('')}</div>${L.length>4?`<button class="btn sm" data-act="qrall" style="margin:6px 0 10px">${open?'ย่อ':'ดูทั้งหมด ('+L.length+')'}</button>`:''}`;
+}
 function qcExportDlg(){
   const L=sitePages().slice().sort((a,b)=>natCmp(a.fileName||a.name,b.fileName||b.name)||(a.page||0)-(b.page||0));
   const list=qcFiltered();const used=new Set(list.map(d=>d.loc&&d.loc.libId).filter(Boolean));
-  const st={mode:UI.qpmode||'table',sel:new Set(used.size?[...used]:[]),pins:false};
+  const st={mode:UI.qpmode||'table',sel:new Set(used.size?[...used]:[]),pins:false,save:true,title:''};
   const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro='0';const box=$('.box',o);
+  const vis=()=>{const q=(st.q||'').trim().toLowerCase();return q?L.filter(l=>[l.name,l.fileName,l.rev,l.room?'ห้อง '+l.room:'',l.group].join(' ').toLowerCase().includes(q)):L};
+  const rowsHTML=()=>{const V=vis();return V.length?V.map(l=>{const n=list.filter(d=>d.loc&&d.loc.libId===l.id).length;return`<label class="pickrow ppr" style="cursor:pointer"><input type="checkbox" data-l="${l.id}" ${st.sel.has(l.id)?'checked':''}><span class="ppt"><img src="${imgSrc(l.imgId)}" alt=""></span><span style="min-width:0;flex:1"><b>${esc(l.name)}</b><span class="small muted" style="display:block">${esc(l.fileName||'')}${l.pages>1?' · หน้า '+(l.page||1)+'/'+l.pages:''}</span></span>${n?`<span class="chip bad">${n} หมุด</span>`:''}</label>`}).join(''):`<div class="empty small">${L.length?'ไม่พบแบบที่ค้นหา':'ยังไม่มีแบบหน้างาน — เพิ่มที่แท็บ “แบบหน้างาน”'}</div>`};
   const draw=()=>{
     box.innerHTML=`<h3 style="margin-bottom:4px">ส่งออก PDF${UI.qv==='table'?' · ตาราง DEFECTS LIST':' · การ์ด Before/After'}</h3><p class="hint" style="margin:0 0 8px">${list.length} รายการตามตัวกรองปัจจุบัน</p>
      <div class="qpm">${[['table','ตารางอย่างเดียว','เหมือนเดิม'],['open','รอบ 1 · OPEN','ตาราง + แบบเปล่าไว้ถือไปตรวจหน้างาน'],['close','รอบ 2 · CLOSE','ตาราง + แบบพร้อมหมุดตำแหน่ง + รูป DEFECT ไปตรวจซ้ำ']].map(([k,t,d])=>`<button class="qpmb ${st.mode===k?'on':''}" data-m="${k}"><b>${t}</b><span class="small muted">${d}</span></button>`).join('')}</div>
      ${st.mode==='table'?'':`<div class="row" style="margin:10px 0 4px"><b class="small">เลือกแบบที่จะแนบ (${st.sel.size})</b><button class="btn sm" data-all="1" style="margin-left:auto">เลือกทั้งหมด</button><button class="btn sm" data-all="0">ล้าง</button></div>
       ${st.mode==='open'?`<label class="chk small"><input type="checkbox" data-pins ${st.pins?'checked':''}> แสดงหมุด DEFECT เดิมบนแบบ</label>`:''}
-      <div class="pplist" style="max-height:34vh">${L.length?L.map(l=>{const n=list.filter(d=>d.loc&&d.loc.libId===l.id).length;return`<label class="pickrow ppr" style="cursor:pointer"><input type="checkbox" data-l="${l.id}" ${st.sel.has(l.id)?'checked':''}><span class="ppt"><img src="${imgSrc(l.imgId)}" alt=""></span><span style="min-width:0;flex:1"><b>${esc(l.name)}</b><span class="small muted" style="display:block">${esc(l.fileName||'')}${l.pages>1?' · หน้า '+(l.page||1)+'/'+l.pages:''}</span></span>${n?`<span class="chip bad">${n} หมุด</span>`:''}</label>`}).join(''):'<div class="empty small">ยังไม่มีแบบหน้างาน — เพิ่มที่แท็บ “แบบหน้างาน”</div>'}</div>`}
+      <input type="search" id="pq-q" placeholder="ค้นหาแบบ เช่น ชั้น 2, ห้อง 205, Rev" value="${esc(st.q||'')}" style="margin:6px 0" autocomplete="off">
+      <div class="pplist" id="pq-l" style="max-height:34vh">${rowsHTML()}</div>`}
+     ${canCreate()?`<div class="panel" style="margin:12px 0 0;padding:10px"><label class="row small" style="gap:6px"><input type="checkbox" data-save ${st.save?'checked':''}> <b>บันทึกรอบนี้ไว้ในเว็บ</b> (แสดงที่หน้าแรก สร้าง PDF ซ้ำได้)</label>${st.save?`<input type="text" id="qr-t" placeholder="${esc(qrDefTitle(st.mode))}" value="${esc(st.title)}" style="margin-top:6px" autocomplete="off">`:''}</div>`:''}
      <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn" data-x="no">ยกเลิก</button><button class="btn pri" data-x="go">สร้าง PDF</button></div>`};
   draw();
-  o.addEventListener('change',e=>{const t=e.target;if(t.dataset.l!==undefined){t.checked?st.sel.add(t.dataset.l):st.sel.delete(t.dataset.l);const h=$('.row b.small',box);if(h)h.textContent=`เลือกแบบที่จะแนบ (${st.sel.size})`}if(t.hasAttribute('data-pins'))st.pins=t.checked});
+  o.addEventListener('input',e=>{if(e.target.id==='qr-t'){st.title=e.target.value;return}if(e.target.id==='pq-q'){st.q=e.target.value;const l=$('#pq-l',box);if(l)l.innerHTML=rowsHTML()}});
+  o.addEventListener('change',e=>{const t=e.target;if(t.dataset.l!==undefined){t.checked?st.sel.add(t.dataset.l):st.sel.delete(t.dataset.l);const h=$('.row b.small',box);if(h)h.textContent=`เลือกแบบที่จะแนบ (${st.sel.size})`}if(t.hasAttribute('data-pins'))st.pins=t.checked;if(t.hasAttribute('data-save')){st.save=t.checked;draw()}});
   o.addEventListener('click',e=>{
     if(e.target===o||e.target.closest('[data-x=no]')){o.remove();return}
     const m=e.target.closest('[data-m]');if(m){st.mode=m.dataset.m;UI.qpmode=st.mode;if(st.mode!=='table'&&!st.sel.size&&L.length)L.forEach(l=>st.sel.add(l.id));draw();return}
-    const al=e.target.closest('[data-all]');if(al){st.sel=al.dataset.all==='1'?new Set(L.map(l=>l.id)):new Set();draw();return}
+    const al=e.target.closest('[data-all]');if(al){if(al.dataset.all==='1')vis().forEach(l=>st.sel.add(l.id));else st.sel=new Set();draw();return}
     if(e.target.closest('[data-x=go]')){
       if(st.mode!=='table'&&!st.sel.size){toast('เลือกแบบอย่างน้อย 1 แบบ');return}
-      o.remove();exportQC('pdf',st.mode==='table'?{}:{plan:{mode:st.mode,libIds:[...st.sel],showPins:st.pins}})}});
+      o.remove();const plan=st.mode==='table'?null:{mode:st.mode,libIds:[...st.sel],showPins:st.pins};
+      if(canCreate()&&st.save){const r=qrSave({mode:st.mode,title:st.title.trim()||qrDefTitle(st.mode),list,plan,view:UI.qv==='table'?'table':'card'});toast('บันทึกรอบ '+r.no+' ไว้ที่หน้าแรกแล้ว',3500)}
+      exportQC('pdf',plan?{plan}:{})}});
 }
 
 /* ---------- ตาราง DEFECTS LIST OF WORK (ตามแบบฟอร์ม) ---------- */
@@ -584,6 +609,11 @@ async function exportQC(kind,opt){
 
 /* ---------- ตัวจัดการเหตุการณ์ของหน้า QC / แบบหน้างาน ---------- */
 const QCACT={
+  qrpdf(a,id){const r=(S.access||[]).find(x=>x.id===id);if(!r)return;const list=(r.defectIds||[]).map(defectById).filter(Boolean);
+    const plan=r.plan?{...r.plan,libIds:(r.plan.libIds||[]).filter(libById)}:null;
+    exportQC('pdf',{list,table:r.view==='table',plan:plan&&plan.libIds.length?plan:null,name:`${r.no}_${String(r.title).replace(/[\\/:*?"<>|\s]+/g,'-')}`})},
+  qrdel(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.access=(S.access||[]).filter(x=>x.id!==id);save();render()})},
+  qrall(a){UI.qrAll=!UI.qrAll;render()},
   qxtog(a){UI.qxo=!UI.qxo;$('#main').innerHTML=viewQC()},
   qxclr(a){UI.qx={};$('#main').innerHTML=viewQC()},
   qbld(a){UI.qb=a.dataset.qb||'';$('#main').innerHTML=viewQC()},

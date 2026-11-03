@@ -475,3 +475,5 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus
 .qbt{flex:none;display:flex;flex-direction:column;gap:1px;padding:7px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);text-align:left;cursor:pointer}
 .qbt b{font-size:14px}.qbt span{font-size:11px;color:var(--muted)}.qbt em{font-style:normal;color:var(--bad);font-weight:700}
 .qbt.on{border-color:var(--accent);background:var(--accent-soft)}
+.qrl{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;margin-bottom:10px}
+.qr{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface)}

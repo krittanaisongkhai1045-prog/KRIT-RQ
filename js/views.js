@@ -77,7 +77,7 @@ function mhome(roots,all){
    <div class="mh-hero"><div class="mh-hl"><span>DEFECT ค้างแก้</span><b>${open}</b><small>จาก ${total} จุด · ${roots.length} ชุดงานส่งตรวจ${sub?` · รอผล ${sub}`:''}</small><button class="mh-cta" data-go="defects">ดูรายการ DEFECT</button></div>
     <svg class="mh-ring" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" class="bg"/><circle cx="42" cy="42" r="34" class="fg" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 42 42)"/><text x="42" y="40" text-anchor="middle" class="n">${pct}%</text><text x="42" y="55" text-anchor="middle" class="t">ปิดแล้ว</text></svg></div>
    <div class="mh-qas">${canCreate()?qa('<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>','ส่งตรวจใหม่','data-act="newopen"'):''}${qa(TABIC.qc,'ถ่าย QC','data-go="qc"')}${qa(TABIC.site,'แบบหน้างาน','data-go="site"')}${qa(TABIC.defects,'DEFECT','data-go="defects"')}</div>
-   <h2 class="mh-sec">ชุดงานส่งตรวจ</h2></div>`}
+   ${typeof qcRoundsHTML==='function'?qcRoundsHTML():''}<h2 class="mh-sec">ชุดงานส่งตรวจ</h2></div>`}
 function viewList(){
   const roots=S.requests.filter(r=>r.type==='OPEN').sort((a,b)=>b.num-a.num);
   const q=UI.q.trim().toLowerCase();const g=UI.grp||'building';
