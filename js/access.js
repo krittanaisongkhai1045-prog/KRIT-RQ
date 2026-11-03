@@ -41,7 +41,7 @@ function accState(a,day){
   if(a.status==='cancel')return'cancel';
   const today=todayISO();
   if(day<today)return'done';if(day>today)return'wait';
-  if(a.done)return'done';
+  if(accMulti(a)?a.doneOn===day:a.done)return'done';
   const now=accNowMin(),f=accMin(a.from),t=accMin(a.to);
   if(f!=null&&now<f)return'wait';
   if(t!=null&&now>=t)return'done';
@@ -49,7 +49,12 @@ function accState(a,day){
 }
 const ACC_ST={in:['กำลังใช้ห้อง','bad'],wait:['รอเข้า','warn'],done:['ใช้เสร็จแล้ว','good'],cancel:['ยกเลิก','']};
 const accTime=a=>(a.from||'--:--')+(a.to?'–'+a.to:'–')
-function accDayReqs(day){return accReqs().filter(a=>a.date===day).sort((a,b)=>String(a.from||'').localeCompare(String(b.from||''))||(a.created||0)-(b.created||0))}
+const accLast=a=>a.dateTo&&a.dateTo>a.date?a.dateTo:a.date;           /* วันสุดท้ายของคำขอ (ช่วงวัน) */
+const accMulti=a=>!!(a.dateTo&&a.dateTo>a.date);
+const accCovers=(a,day)=>!!a.date&&day>=a.date&&day<=accLast(a);
+const accEffDay=a=>{const t=todayISO();return accCovers(a,t)?t:a.date};    /* วันที่ใช้ตัดสินสถานะ/ล็อก */
+const accRangeLabel=a=>accMulti(a)?`${accDateLabel(a.date)} – ${accDateLabel(a.dateTo)}`:accDateLabel(a.date);
+function accDayReqs(day){return accReqs().filter(a=>accCovers(a,day)).sort((a,b)=>String(a.from||'').localeCompare(String(b.from||''))||(a.created||0)-(b.created||0))}
 function accRoomState(key,reqs,day){
   const rs=reqs.filter(a=>(a.rooms||[]).includes(key)&&a.status!=='cancel');
   if(!rs.length)return{k:'none',rs:[]};
@@ -86,7 +91,7 @@ function accCard(a,day){
   const st=accState(a,day);const ph=(a.photos||[])[0];
   return`<div class="acard" data-act="accedit" data-id="${a.id}"><div class="th">${ph?annotatedSvg(imgSrc(ph.imgId),ph.w,ph.h,[],[]):'<i>ไม่มีรูป</i>'}</div>
    <div class="bd"><div class="row" style="gap:6px"><b>${esc(a.who||'(ไม่ระบุผู้ขอ)')}</b>${chip(ACC_ST[st][0],ACC_ST[st][1])}</div>
-   <div class="small muted">${esc(a.org||'')}</div><div class="small mono">${esc(accTime(a))}${(a.photos||[]).length>1?` · ${a.photos.length} รูป`:''}</div>
+   <div class="small muted">${esc(a.org||'')}</div><div class="small mono">${accMulti(a)?esc(accRangeLabel(a))+'<br>':''}${esc(accTime(a))}${(a.photos||[]).length>1?` · ${a.photos.length} รูป`:''}</div>
    <div class="accrooms">${(a.rooms||[]).slice(0,8).map(k=>`<span class="chip">${esc(accRoomName(k))}</span>`).join('')}${(a.rooms||[]).length>8?`<span class="chip">+${a.rooms.length-8}</span>`:''}</div></div></div>`;
 }
 function viewAccess(){
@@ -95,11 +100,21 @@ function viewAccess(){
    ${can?`<label class="btn pri" for="acccam">📷 ถ่ายเอกสารขอเข้า</label><input id="acccam" type="file" accept="image/*" capture="environment" hidden><button class="btn" data-act="accnew">＋ บันทึกคำขอ</button><button class="btn" data-act="accrooms">จัดการรายชื่อห้อง</button>`:''}</div>
    <div class="accdate"><button class="btn sm" data-act="accday" data-id="-1" aria-label="วันก่อนหน้า">‹</button><b>${accDateLabel(day)}</b>${isToday?'<span class="chip bad">วันนี้</span>':''}<button class="btn sm" data-act="accday" data-id="1" aria-label="วันถัดไป">›</button>${isToday?'':'<button class="btn sm" data-act="accday" data-id="0">กลับไปวันนี้</button>'}<input type="date" id="accd" value="${day}" style="width:auto"><span class="accexp"><button class="btn sm" data-act="accpdf">⬇ PDF</button><button class="btn sm" data-act="accpng">⬇ PNG</button></span></div>
    <div id="acclive">${accLiveHTML(day)}</div>`;
+  h+=accUpcomingHTML();
   const sn=accSnaps();
   h+=`<h2 class="mh-sec2" style="margin-top:22px">ภาพสรุปย้อนหลังรายวัน <span class="small muted">${sn.length} วัน</span></h2>
    <p class="hint">ระบบบันทึกภาพตารางห้องของแต่ละวันไว้ให้เอง (หลัง 21:00 ของวันนั้น หรือครั้งแรกที่เปิดแอปในวันถัดไป) กดดูย้อนหลังได้</p>
    ${can?`<div class="row" style="margin-bottom:10px"><button class="btn" data-act="accsnapnow">บันทึกภาพของ ${esc(accDateLabel(day))} ตอนนี้</button></div>`:''}
    ${sn.length?`<div class="accsnaps">${sn.map(x=>`<button class="snp" data-act="accsnapopen" data-id="${x.id}"><div class="im">${x.imgId?`<img src="${imgSrc(x.imgId)}" alt="" loading="lazy">`:''}</div><b>${esc(accDateLabel(x.date))}</b><span class="small muted">${x.reqs||0} คำขอ · ${x.roomsUsed||0} ห้อง</span></button>`).join('')}</div>`:'<div class="empty small">ยังไม่มีภาพสรุป</div>'}`;
+  return h;
+}
+/* คำขอล่วงหน้า: ทุกคำขอที่ลงวันที่หลังวันนี้ (วันนี้ไม่แสดงซ้ำ) */
+function accUpcomingHTML(){
+  const t=todayISO();const L=accReqs().filter(a=>a.date&&a.date>t).sort((a,b)=>a.date.localeCompare(b.date)||String(a.from||'').localeCompare(String(b.from||''))||(a.created||0)-(b.created||0));
+  let h=`<h2 class="mh-sec2" style="margin-top:22px">คำขอล่วงหน้า <span class="small muted">${L.length} รายการ</span></h2>`;
+  if(!L.length)return h+'<div class="empty small">ยังไม่มีคำขอล่วงหน้า — คำขอที่ลงวันที่หลังจากวันนี้จะแสดงที่นี่</div>';
+  const by=new Map();L.forEach(a=>{if(!by.has(a.date))by.set(a.date,[]);by.get(a.date).push(a)});
+  for(const[d,list]of by)h+=`<div class="ghead l1" style="margin-top:8px"><b>${accDateLabel(d)}</b><span class="small muted">${list.length} คำขอ</span><button class="btn sm" data-act="accgo" data-id="${d}" style="margin-left:auto">ดูตารางวันนั้น</button></div><div class="accl">${list.map(a=>accCard(a,d)).join('')}</div>`;
   return h;
 }
 function accPaint(){const el=$('#acclive');if(el)el.innerHTML=accLiveHTML(accDay())}
@@ -116,12 +131,12 @@ async function accAddPhotos(a,files,field){
 function accEdit(a,isNew){
   const perm=!(MODE.ro||(!isNew&&!canEditKey('access',a.id)));
   /* ล็อก: คำขอที่กำลังใช้ห้องอยู่ แก้ไขไม่ได้จนกว่าจะหมดเวลาที่ขอ (หรือกด "ออกจากห้องแล้ว") */
-  const lock=!isNew&&accState(a,a.date)==='in';
+  const lock=!isNew&&accState(a,accEffDay(a))==='in';
   const ro=!perm||lock;
   const rooms=accRoomList();let q='';
   const o=overlay('<div class="box wide"></div>','modal');o.dataset.ro=perm?'0':'1';const box=$('.box',o);
   const draw=()=>{
-    const st=isNew?'':accState(a,a.date);
+    const st=isNew?'':accState(a,accEffDay(a));
     box.innerHTML=`<div class="row" style="margin-bottom:10px"><h3 style="margin-right:auto">${isNew?'บันทึกคำขอเข้าห้อง':'คำขอเข้าห้อง'} ${isNew?'':chip(ACC_ST[st][0],ACC_ST[st][1])}</h3>${!isNew&&[...(a.photos||[]),...(a.before||[]),...(a.after||[])].length?'<button class="btn" data-a="dlall" style="margin-right:6px">⬇ ดาวน์โหลดรูปทั้งหมด</button>':''}<button class="btn pri" data-a="close">${isNew?'ยกเลิก':'เสร็จ'}</button></div>
      <div class="accphotos">${(a.photos||[]).map(p=>`<div class="qp"><div class="thumb" data-a="photo" data-id="${p.id}">${annotatedSvg(imgSrc(p.imgId),p.w,p.h,[],[])}</div>${ro?'':`<button class="btn sm bad" data-a="delp" data-id="${p.id}">ลบรูป</button>`}</div>`).join('')}
       ${ro?'':`<div class="qp"><label class="btn" for="ac-cam">📷 ถ่ายเอกสาร</label><input id="ac-cam" data-accph="1" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="ac-up">🖼 เลือกรูป (หลายรูป)</label><input id="ac-up" data-accph="1" type="file" accept="image/*" multiple hidden></div>`}</div>
@@ -131,7 +146,8 @@ function accEdit(a,isNew){
      <div class="grid" style="margin-top:10px">
       <label class="f">ผู้ขอเข้า<input type="text" data-af="who" value="${esc(a.who||'')}" ${ro?'disabled':''} placeholder="ชื่อ-นามสกุล"></label>
       <label class="f">หน่วยงาน / บริษัท / ทีม<input type="text" data-af="org" value="${esc(a.org||'')}" ${ro?'disabled':''}></label>
-      <label class="f">วันที่ขอเข้า<input type="date" data-af="date" value="${esc(a.date||'')}" ${ro?'disabled':''}></label>
+      <div class="grid" style="grid-column:1/-1;grid-template-columns:1fr 1fr;gap:8px"><label class="f">วันที่ขอเข้า (เริ่ม)<input type="date" data-af="date" value="${esc(a.date||'')}" ${ro?'disabled':''}></label><label class="f">ถึงวันที่ (ถ้าขอหลายวัน)<input type="date" data-af="dateTo" value="${esc(a.dateTo||'')}" min="${esc(a.date||'')}" ${ro?'disabled':''}></label></div>
+      ${accMulti(a)?`<div class="hint" style="grid-column:1/-1;margin:-2px 0 6px">ขอเข้าต่อเนื่อง ${Math.round((new Date(a.dateTo)-new Date(a.date))/864e5)+1} วัน · เวลาเข้า-ออกด้านล่างใช้เหมือนกันทุกวัน</div>`:''}
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:8px"><label class="f">เวลาเข้า<input type="time" data-af="from" value="${esc(a.from||'')}" ${ro?'disabled':''}></label><label class="f">เวลาออก (ถ้าทราบ)<input type="time" data-af="to" value="${esc(a.to||'')}" ${ro?'disabled':''}></label></div>
      </div>
      <div class="f" style="margin-top:10px"><b class="small">ห้องที่ขอเข้า (${(a.rooms||[]).length})</b>
@@ -145,7 +161,7 @@ function accEdit(a,isNew){
   const finish=()=>{o.remove();accPaintAll()};
   o.addEventListener('input',e=>{const t=e.target;if(ro)return;
     if(t.id==='ac-q'){q=t.value;const p=t.selectionStart;draw();const n=$('#ac-q',o);n.focus();n.setSelectionRange(p,p);return}
-    if(t.dataset.af){a[t.dataset.af]=t.value}});
+    if(t.dataset.af){a[t.dataset.af]=t.value;if(t.dataset.af==='date'&&a.dateTo&&a.dateTo<=a.date)a.dateTo=''}});
   o.addEventListener('change',async e=>{const t=e.target;if(ro&&!(perm&&t.dataset.accph))return;
     if(t.dataset.accph){const fs=[...t.files];t.value='';if(fs.length){toast('กำลังเพิ่มรูป…',20000);await accAddPhotos(a,fs,['before','after'].includes(t.dataset.accph)?t.dataset.accph:'photos');draw();if(!isNew)accSave(a,false)}return}
     if(t.dataset.af==='date'){draw()}});
@@ -156,7 +172,7 @@ function accEdit(a,isNew){
     if(k==='dlall'){accDownloadPhotos(a,b);return}
     if(k==='photo'){const p=[...(a.photos||[]),...(a.before||[]),...(a.after||[])].find(x=>x.id===b.dataset.id);if(p)openBoard({kind:'photo',ro:true,title:'เอกสารขอเข้าห้อง',imgUrl:imgSrc(p.imgId),w:p.w,h:p.h,shapes:[],onChange:()=>{},onClose:()=>{}});return}
     if(k==='dela'&&perm){a.after=(a.after||[]).filter(x=>x.id!==b.dataset.id);draw();if(!isNew)accSave(a,false);return}
-    if(k==='out'&&perm&&!isNew){a.to=accNowHM();a.done=true;accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
+    if(k==='out'&&perm&&!isNew){if(accMulti(a))a.doneOn=todayISO();else{a.to=accNowHM();a.done=true}accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
     if(ro)return;
     if(k==='delb'){a.before=(a.before||[]).filter(x=>x.id!==b.dataset.id);draw();return}
     if(k==='delp'){a.photos=a.photos.filter(x=>x.id!==b.dataset.id);draw();return}
@@ -164,15 +180,17 @@ function accEdit(a,isNew){
     if(k==='save'){if(!(a.who||'').trim()&&!(a.photos||[]).length){toast('ใส่ชื่อผู้ขอ หรือถ่ายรูปเอกสารอย่างน้อย 1 อย่าง');return}
       if(!(a.rooms||[]).length&&rooms.length){toast('เลือกห้องที่ขอเข้าอย่างน้อย 1 ห้อง');return}
       accSave(a,isNew);toast('บันทึกคำขอแล้ว');finish();return}
-    if(k==='out'){a.to=accNowHM();a.done=true;accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
+    if(k==='out'){if(accMulti(a))a.doneOn=todayISO();else{a.to=accNowHM();a.done=true}accSave(a,false);toast('บันทึกเวลาออกแล้ว');finish();return}
     if(k==='cancel'){a.status=a.status==='cancel'?'':'cancel';accSave(a,false);finish();return}
     if(k==='del'){armBtn(b,'กดอีกครั้งเพื่อลบ',()=>{S.access=S.access.filter(x=>x.id!==a.id);save();finish()})}
   });
 }
 function accSave(a,isNew){
   S.access=S.access||[];
+  if(a.dateTo&&(!a.date||a.dateTo<=a.date))delete a.dateTo;
   if(isNew&&!S.access.includes(a))S.access.push(a);else if(!S.access.find(x=>x.id===a.id))S.access.push(a);
   save();
+  if(isNew&&a.date&&a.date!==accDay())toast(`บันทึกคำขอแล้ว — วันที่ ${accRangeLabel(a)}${a.date>todayISO()?' (ดูได้ที่ “คำขอล่วงหน้า”)':''}`,4500);
 }
 const accPaintAll=()=>{if(UI.route==='access')$('#main').innerHTML=viewAccess()};
 
@@ -343,6 +361,7 @@ async function accAutoSnap(){
 
 /* ----- เหตุการณ์ ----- */
 const ACCACT={
+  accgo(a,id){UI.accDate=id===todayISO()?null:id;accPaintAll();window.scrollTo({top:0,behavior:'smooth'})},
   accday(a,id){UI.accDate=id==='0'?null:accShift(accDay(),+id);if(UI.accDate===todayISO())UI.accDate=null;accPaintAll()},
   accnew(){if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return}accEdit(accNew(),true)},
   accrooms(){accRoomsDlg()},

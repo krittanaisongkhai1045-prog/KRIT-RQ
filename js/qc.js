@@ -5,10 +5,19 @@ const QC_ST={open:['ต้องแก้ไข','bad'],fixed:['แก้แล�
 const qcList=()=>S.defects.filter(d=>d.qc);
 const qcImageIds=()=>[...qcList().flatMap(d=>[...(d.before||[]),...(d.after||[])].map(p=>p.imgId)),...(typeof accImageIds==='function'?accImageIds():[])];
 function qcNext(){const n=qcList().reduce((m,d)=>Math.max(m,d.num||0),0)+1;return{num:n,code:'QC-'+String(n).padStart(3,'0')}}
+/* เลขรหัสนับแยกตามห้อง (อาคาร+ชั้น+ห้อง) เริ่ม QC-01 ในแต่ละห้อง */
+const qcRoomKey=d=>[d.building,d.floor,d.area].map(x=>String(x||'').trim().toLowerCase()).join('|');
+const qcPad=n=>'QC-'+String(n).padStart(2,'0');
+function qcRoomCode(d){const k=qcRoomKey(d);let m=0;qcList().forEach(x=>{if(x!==d&&qcRoomKey(x)===k){const n=+(String(x.code).match(/^QC-(\d+)$/)||[])[1];if(n>m)m=n}});return qcPad(m+1)}
+function qcRenumber(){
+  const by=new Map();qcList().slice().sort((a,b)=>(a.num||0)-(b.num||0)).forEach(d=>{const k=qcRoomKey(d);if(!by.has(k))by.set(k,[]);by.get(k).push(d)});
+  let n=0;by.forEach(l=>l.forEach((d,i)=>{const c=qcPad(i+1);if(d.code!==c){d.code=c;n++}}));save();return{rooms:by.size,changed:n};
+}
 function newQC(loc,num0){
   const n=num0!=null?{num:num0,code:'QC-'+String(num0).padStart(3,'0')}:qcNext();
   const d={id:'df'+uid(),qc:true,rootId:'',foundIn:'',num:n.num,code:n.code,status:'open',building:'',area:'',surface:'',face:'',type:'',desc:'',fix:'',protect:'',due:'',floor:'',scope:'',inspector:'',owner:'',note:'',grid:null,loc:loc||null,before:[],after:[],found:todayISO(),fixedOn:'',closedOn:'',created:Date.now()};
   const last=qcList().slice(-1)[0];if(last){d.building=last.building||'';d.floor=last.floor||'';d.area=last.area;d.surface=last.surface;d.inspector=last.inspector||'';d.owner=last.owner||''}
+  if(num0==null)d.code=qcRoomCode(d);
   S.defects.push(d);save();return d;
 }
 const libById=id=>S.library.find(l=>l.id===id);
@@ -36,25 +45,31 @@ function qcCatTiles(){
   if(!m.size)return'';const cur=UI.qs||'';
   const tile=(k,ic,n,open)=>`<button class="qcat ${cur===k?'on':''}" data-act="qcat" data-qcat="${esc(k)}"><i class="ic">${ic}</i><b>${esc(k||'ทั้งหมด')}</b><span>${open?`<em>${open}</em> ค้าง · `:''}${n} จุด</span></button>`;
   return`<div class="qcats">${tile('',QCI('<rect x="4" y="4" width="6.500" height="6.500" rx="1.500"/><rect x="13.500" y="4" width="6.500" height="6.500" rx="1.500"/><rect x="4" y="13.500" width="6.500" height="6.500" rx="1.500"/><rect x="13.500" y="13.500" width="6.500" height="6.500" rx="1.500"/>'),all.length,all.filter(d=>d.status!=='closed').length)}${[...m.entries()].sort((a,b)=>b[1].n-a[1].n).map(([k,e])=>tile(k,qcCatIcon(k),e.n,e.open)).join('')}</div>`}
+const qcBld=d=>(d.building||'').trim()||'ไม่ระบุอาคาร';
+function qcBldTiles(){
+  const all=qcList();const m=new Map();all.forEach(d=>{const k=qcBld(d);const e=m.get(k)||{n:0,open:0};e.n++;if(d.status!=='closed')e.open++;m.set(k,e)});
+  if(!m.size)return'';const cur=UI.qb||'';
+  const tile=(k,label,n,open)=>`<button class="qbt ${cur===k?'on':''}" data-act="qbld" data-qb="${esc(k)}"><b>${esc(label)}</b><span>${open?`<em>${open}</em> ค้าง · `:''}${n} จุด</span></button>`;
+  return`<div class="qbts"><span class="small muted">อาคาร</span>${tile('','ทั้งหมด',all.length,all.filter(d=>d.status!=='closed').length)}${[...m.entries()].sort((a,b)=>natCmp(a[0],b[0])).map(([k,e])=>tile(k,k==='ไม่ระบุอาคาร'?k:'อาคาร '+k,e.n,e.open)).join('')}</div>`}
 function qcFiltered(){
   const f=UI.qf||'open',q=(UI.qq||'').trim().toLowerCase();
-  return qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
-    .sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
+  return qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(!UI.qb||qcBld(d)===UI.qb)&&(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
+    .sort((a,b)=>natCmp(qcBld(a),qcBld(b))||natCmp(String(a.floor||''),String(b.floor||''))||natCmp(String(a.area||''),String(b.area||''))||natCmp(String(a.code),String(b.code))||(a.num||0)-(b.num||0));
 }
 
 /* ---------- หน้ารายการ QC ---------- */
 function viewQC(){
-  const f=UI.qf||'open',g=UI.qg||'work';const all=qcList();const owner=canCreate();
+  const f=UI.qf||'open',g=UI.qg||'building';const all=qcList();const owner=canCreate();
   const cnt=k=>all.filter(d=>(d.status||'open')===k).length;
   let h=`<div class="row" style="margin-bottom:6px"><h1 style="font-size:22px;margin-right:auto">QC DEFECT · Before / After</h1>
    ${owner?'<label class="btn pri" for="qccam">📷 ถ่าย QC DEFECT ใหม่</label><input id="qccam" type="file" accept="image/*" capture="environment" hidden><label class="btn" for="qcmulti" title="เลือกรูปหลายรูปพร้อมกัน แต่ละรูปสร้างเป็น 1 รายการ">🖼 เลือกรูปหลายรูป (1 รูป = 1 รายการ)</label><input id="qcmulti" type="file" accept="image/*" multiple hidden><button class="btn" data-act="qcnew">＋ บันทึก DEFECT ใหม่</button>':''}<button class="btn" data-act="qcpdf">PDF${UI.qv==='table'?' (ตาราง)':''}</button><button class="btn" data-act="qchtml">HTML${UI.qv==='table'?' (ตาราง)':''}</button></div>
    <p class="hint" style="margin:0 0 10px">ใช้บันทึกงานที่พบจากการตรวจ QC โดยไม่ต้องมีใบ Inspection: ถ่ายรูปก่อนแก้ → แก้ → ถ่ายรูปหลังแก้ → ปิด · ปักหมุดตำแหน่งบน “แบบหน้างาน” และระบุแผ่นกระเบื้องที่ต้องแก้ได้</p>
+   ${qcBldTiles()}
    ${qcCatTiles()}
    <div class="stats"><div><b>${all.length}</b><span>ทั้งหมด</span></div><div><b style="color:var(--bad)">${cnt('open')}</b><span>ต้องแก้ไข</span></div><div><b style="color:var(--warn)">${cnt('fixed')}</b><span>แก้แล้ว รอตรวจซ้ำ</span></div><div><b style="color:var(--good)">${cnt('closed')}</b><span>ปิดแล้ว</span></div></div>
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
    <label class="row small muted" style="gap:6px">มุมมอง<select id="qv" style="width:auto;color:var(--fg)"><option value="card" ${UI.qv!=='table'?'selected':''}>การ์ด</option><option value="table" ${UI.qv==='table'?'selected':''}>ตาราง DEFECTS LIST</option></select></label>
-   <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','งาน (Scope)'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>
-   <input type="search" id="qq" placeholder="ค้นหารหัส / ห้อง / ประเภท" value="${esc(UI.qq||'')}" style="width:220px"></div>`;
+   <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','งาน (Scope)'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>${owner?'<button class="btn sm" data-act="qcrenum" title="เรียงเลขรหัสใหม่ในแต่ละห้อง เริ่มจาก QC-01">เรียงเลข QC ใหม่ตามห้อง</button>':''}</div>`;
   const ds=qcFiltered();
   if(!ds.length)return h+`<div class="empty">${all.length?'ไม่มีรายการในมุมมองนี้':owner?'ยังไม่มี QC DEFECT กด “บันทึก DEFECT ใหม่” หรือเปิด “แบบหน้างาน” แล้วปักหมุดที่จุดที่พบ':'ยังไม่มีข้อมูล'}</div>`;
   if(UI.qv==='table')return h+(MODE.ro?qcTableView(ds):qcTableEdit(ds));
@@ -63,7 +78,9 @@ function viewQC(){
   for(const k of [...groups.keys()].sort((a,b)=>a.localeCompare(b,'th',{numeric:true}))){
     const list=groups.get(k);const open=list.filter(d=>d.status!=='closed').length;
     if(k!=='')h+=`<div class="ghead l1"><b>${esc(k)}</b><span class="small muted">${list.length} จุด</span>${open?`<span class="chip bad">ค้าง ${open}</span>`:'<span class="chip good">ปิดครบ</span>'}</div>`;
-    h+=`<div class="cards">${list.map(qcCard).join('')}</div>`;
+    if(g==='building'){const rm=new Map();list.forEach(d=>{const r=[d.floor&&'ชั้น '+d.floor,d.area||'ไม่ระบุห้อง'].filter(Boolean).join(' · ');if(!rm.has(r))rm.set(r,[]);rm.get(r).push(d)});
+      for(const[r,l2]of rm)h+=`<div class="ghead gtg"><b>${esc(r)}</b><span class="small muted">${l2.length} จุด</span></div><div class="cards">${l2.map(qcCard).join('')}</div>`}
+    else h+=`<div class="cards">${list.map(qcCard).join('')}</div>`;
   }
   return h;
 }
@@ -129,6 +146,7 @@ function editQC(d,ctx){
     else if(t.dataset.qp){const[s,id]=t.dataset.qp.split(':');const p=(d[s]||[]).find(x=>x.id===id);if(p){p.caption=t.value;save()}}});
   o.addEventListener('change',async e=>{const t=e.target;if(ro)return;
     if(t.dataset.qstage){await addQCPhotos(d,t.dataset.qstage,[...t.files]);t.value='';draw();return}
+    if(['building','floor','area'].includes(t.dataset.qf)&&/^QC-\d+$/.test(d.code)){const c=qcRoomCode(d);if(c!==d.code){d.code=c;save();const ci=$('[data-qf=code]',o);if(ci)ci.value=c;const hh=$('h3 .mono',o);if(hh)hh.textContent=c;toast('รหัสเปลี่ยนเป็น '+c+' ตามห้องใหม่',2500)}return}
     if(t.dataset.qf==='surface'||t.dataset.qf==='type'||t.dataset.qf==='fix')return});
   o.addEventListener('click',e=>{
     if(e.target===o){done();return}
@@ -140,7 +158,7 @@ function editQC(d,ctx){
     if(q==='delp'){armBtn(b,'กดอีกครั้งเพื่อลบ',()=>{d[b.dataset.st]=d[b.dataset.st].filter(x=>x.id!==b.dataset.id);save();draw()});return}
     if(q==='detail'){editDefect(d,{qc:true,canDelete:false,after:()=>draw()});return}
     if(q==='goplan'){const lib=libById(d.loc.libId);if(lib){o.remove();openSite(lib,{after:()=>{ctx.after&&ctx.after(true)}})}return}
-    if(q==='pin'){pickSitePlan(lib=>{o.remove();openSite(lib,{pinFor:d,after:()=>{editQC(d,ctx)}})});return}
+    if(q==='pin'){pickSitePlan(lib=>{if(lib.room&&!d.area){d.area='ห้อง '+lib.room;save()}o.remove();openSite(lib,{pinFor:d,after:()=>{editQC(d,ctx)}})});return}
     if(q==='del'){armBtn(b,'กดอีกครั้งเพื่อลบ',()=>{S.defects=S.defects.filter(z=>z.id!==d.id);save();done()});return}
   });
 }
@@ -205,14 +223,60 @@ function pickSitePlan(cb){
   if(!L.length){toast('ยังไม่มีแบบหน้างาน — เพิ่มที่แท็บ “แบบหน้างาน” ก่อน',3500);return}
   if(L.length===1)return cb(L[0]);
   const cnt=l=>qcList().filter(d=>d.loc&&d.loc.libId===l.id&&d.status!=='closed').length;
-  const o=overlay('<div class="box wide"><h3 style="margin-bottom:4px">เลือกแบบที่จะปักหมุด</h3><p class="hint" style="margin:0 0 8px">เรียงตามชื่อไฟล์แบบและหน้า · พิมพ์ค้นหาได้ เช่น ชั้น 2, E101</p><input type="search" id="pp-q" placeholder="ค้นหาชื่อแบบ" style="margin-bottom:8px"><div id="pp-l" class="pplist"></div><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-l="">ยกเลิก</button></div></div>','modal');
+  const o=overlay('<div class="box wide"><h3 style="margin-bottom:4px">เลือกแบบที่จะปักหมุด</h3><p class="hint" style="margin:0 0 8px">เรียงตามชื่อไฟล์แบบและหน้า · พิมพ์ค้นหาได้ เช่น ชั้น 2, ห้อง 205 · ปุ่ม “สำเนา” = ทำสำเนา/พลิกแบบ ใส่เลขห้อง</p><input type="search" id="pp-q" placeholder="ค้นหาชื่อแบบ" style="margin-bottom:8px"><div id="pp-l" class="pplist"></div><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" data-l="">ยกเลิก</button></div></div>','modal');
   const paint=()=>{const q=($('#pp-q',o).value||'').trim().toLowerCase();let last=null,h='';
-    L.filter(l=>!q||[l.name,l.fileName,l.rev].join(' ').toLowerCase().includes(q)).forEach(l=>{const g=l.fileName||l.name;
+    L.filter(l=>!q||[l.name,l.fileName,l.rev,l.room?'ห้อง '+l.room:'',l.group].join(' ').toLowerCase().includes(q)).forEach(l=>{const g=l.fileName||l.name;
       if(g!==last){h+=`<div class="ppg">${esc(g)}${l.pages>1?` <span class="small muted">· ${l.pages} หน้า</span>`:''}</div>`;last=g}
-      const n=cnt(l);h+=`<button class="pickrow ppr" data-l="${l.id}"><span class="ppt"><img src="${imgSrc(l.imgId)}" alt="" loading="lazy"></span><span style="min-width:0;flex:1"><b>${esc(l.name)}</b><span class="small muted" style="display:block">${l.pages>1?'หน้า '+(l.page||1)+'/'+l.pages+(l.rev?' · ':''):''}${esc(l.rev||'')}</span></span>${n?`<span class="chip bad">${n} หมุด</span>`:''}</button>`});
+      const n=cnt(l);h+=`<div class="ppw"><button class="pickrow ppr" data-l="${l.id}"><span class="ppt"><img src="${imgSrc(l.imgId)}" alt="" loading="lazy"></span><span style="min-width:0;flex:1"><b>${esc(l.name)}</b><span class="small muted" style="display:block">${l.pages>1?'หน้า '+(l.page||1)+'/'+l.pages+(l.rev?' · ':''):''}${esc(l.rev||'')}</span></span>${l.room?`<span class="chip">ห้อง ${esc(l.room)}</span>`:''}${n?`<span class="chip bad">${n} หมุด</span>`:''}</button>${canCreate()?`<button class="btn sm ppd" data-dup="${l.id}" title="ทำสำเนา / พลิกแบบ">⧉ สำเนา</button>`:''}</div>`});
     $('#pp-l',o).innerHTML=h||'<div class="empty small">ไม่พบแบบ</div>'};
   paint();$('#pp-q',o).addEventListener('input',paint);
-  o.addEventListener('click',e=>{const b=e.target.closest('[data-l]');if(!b&&e.target!==o)return;o.remove();if(b&&b.dataset.l)cb(libById(b.dataset.l))});
+  o.addEventListener('click',e=>{const dp=e.target.closest('[data-dup]');if(dp){dupPlanDlg(libById(dp.dataset.dup),()=>{L.length=0;sitePages().slice().sort((a,b)=>natCmp(a.fileName||a.name,b.fileName||b.name)||(a.page||0)-(b.page||0)||natCmp(a.name,b.name)).forEach(x=>L.push(x));paint()});return}const b=e.target.closest('[data-l]');if(!b&&e.target!==o)return;o.remove();if(b&&b.dataset.l)cb(libById(b.dataset.l))});
+}
+
+/* ---------- ทำสำเนาแบบ + พลิก + ใส่เลขห้อง ---------- */
+function parseRoomNos(t){
+  const out=[];String(t||'').split(/[\s,;]+/).filter(Boolean).forEach(p=>{
+    const m=p.match(/^(\D*)(\d+)-(\D*)(\d+)$/);
+    if(m&&+m[4]>=+m[2]&&+m[4]-+m[2]<80){for(let n=+m[2];n<=+m[4];n++)out.push(m[1]+n)}else out.push(p)});
+  return[...new Set(out)];
+}
+async function transformedImageId(imgId,mode){
+  if(mode==='none')return imgId;
+  if(mode==='x'||mode==='y')return flippedImageId(imgId,mode);
+  const a=await flippedImageId(imgId,'x');return flippedImageId(a,'y');   // both = หมุน 180°
+}
+function dupPlanDlg(lib,done){
+  if(!lib)return;
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:4px">ทำสำเนาแบบ · ${esc(lib.name)}</h3>
+   <p class="hint" style="margin:0 0 8px">ได้แบบใหม่ที่ปักหมุดแยกจากแบบเดิม · ใส่หลายห้องได้ เช่น <b>201, 202, 205-208</b> จะได้สำเนาห้องละ 1 แผ่น</p>
+   <label class="small">เลขห้อง (เว้นว่าง = สำเนา 1 แผ่นไม่มีเลขห้อง)</label><input type="text" id="dp-r" placeholder="เช่น 201, 202, 205-208" autocomplete="off">
+   <label class="small" style="margin-top:8px;display:block">พลิกแบบ</label>
+   <select id="dp-f"><option value="none">ไม่พลิก</option><option value="x">กลับซ้าย-ขวา (กระจก)</option><option value="y">กลับบน-ล่าง</option><option value="xy">หมุน 180°</option></select>
+   <label class="row small" style="gap:6px;margin-top:8px"><input type="checkbox" id="dp-s" checked> คัดลอกโซน/เส้นที่วาดไว้ด้วย (พลิกตามให้)</label>
+   <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" data-x="no">ยกเลิก</button><button class="btn pri" data-x="ok">สร้างสำเนา</button></div></div>`,'modal');
+  o.addEventListener('click',async e=>{
+    if(e.target===o||(e.target.dataset&&e.target.dataset.x==='no')){o.remove();return}
+    if(!(e.target.dataset&&e.target.dataset.x==='ok'))return;
+    const rooms=parseRoomNos($('#dp-r',o).value),mode=$('#dp-f',o).value,withShapes=$('#dp-s',o).checked;
+    const btn=e.target;btn.disabled=true;btn.textContent='กำลังสร้าง…';
+    try{
+      const imgId=await transformedImageId(lib.imgId,mode);
+      const names=rooms.length?rooms:[''];const base=(lib.fileName||lib.name).replace(/\s*·\s*ห้อง.*$/,'');
+      let k=0;
+      for(const r of names){
+        const nm=r?`${base} · ห้อง ${r}`:`${base} (สำเนา)`;const fid='f'+uid();
+        const c=JSON.parse(JSON.stringify(lib));
+        Object.assign(c,{id:'lb'+uid(),fileId:fid,fileName:nm,name:nm,page:1,pages:1,imgId,room:r||'',srcPlan:lib.id,date:todayISO()});
+        delete c.owner;delete c.acl;
+        c.shapes=[];
+        if(withShapes&&(lib.shapes||[]).length){c.shapes=JSON.parse(JSON.stringify(lib.shapes));
+          if(mode==='x'||mode==='y')mirrorShapes(c.shapes,lib.w,lib.h,mode);
+          else if(mode==='xy'){mirrorShapes(c.shapes,lib.w,lib.h,'x');mirrorShapes(c.shapes,lib.w,lib.h,'y')}}
+        S.library.push(c);k++;
+      }
+      save();render();o.remove();toast(`สร้างสำเนา ${k} แผ่นแล้ว${rooms.length?' (ใส่เลขห้องแล้ว)':''}`,3500);done&&done();
+    }catch(err){btn.disabled=false;btn.textContent='สร้างสำเนา';toast('ทำสำเนาไม่สำเร็จ: '+(err&&err.message||err),4500)}
+  });
 }
 
 /* ---------- หน้าแบบหน้างาน ---------- */
@@ -247,7 +311,7 @@ function viewSite(){
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:6px"><input type="text" data-sl="${g.fid}" data-k="rev" value="${esc(g.rev)}" placeholder="Rev. เช่น R3" aria-label="revision"><input type="date" data-sl="${g.fid}" data-k="date" value="${esc(g.date)}" aria-label="วันที่แบบ"></div>
         <input type="text" data-sl="${g.fid}" data-k="group" value="${esc(g.group)}" placeholder="กลุ่ม เช่น อาคาร A / ชั้น 3" list="sitegrp"></div>`:''}
       <div class="row"><button class="btn pri sm" data-act="siteopenf" data-id="${g.fid}">${g.pages.length>1?'เปิดไฟล์':'เปิดแบบ'}</button>
-       ${can?`<button class="btn sm" data-act="siteedit" data-id="${g.fid}">${editing?'เสร็จ':'แก้ไขชื่อ/Rev.'}</button><label class="btn sm" for="siterep-${g.fid}">${p0?'อัปโหลดฉบับใหม่':'ใส่ภาพแบบ (PDF/รูป)'}</label><input id="siterep-${g.fid}" data-rep="${g.fid}" type="file" accept="image/*,application/pdf" hidden>
+       ${p0&&canCreate()?`<button class="btn sm" data-act="sitedup" data-id="${p0.id}">⧉ สำเนา/พลิก</button>`:''}${can?`<button class="btn sm" data-act="siteedit" data-id="${g.fid}">${editing?'เสร็จ':'แก้ไขชื่อ/Rev.'}</button><label class="btn sm" for="siterep-${g.fid}">${p0?'อัปโหลดฉบับใหม่':'ใส่ภาพแบบ (PDF/รูป)'}</label><input id="siterep-${g.fid}" data-rep="${g.fid}" type="file" accept="image/*,application/pdf" hidden>
        <label class="btn sm" for="siteatt-${g.fid}">แนบ DWG</label><input id="siteatt-${g.fid}" data-attach="${g.fid}" type="file" hidden>`:''}
        ${mine?`<button class="btn sm bad" data-act="sitedel" data-id="${g.fid}">ลบไฟล์</button>`:''}</div></div></div>`;
   }
@@ -260,7 +324,7 @@ function viewSiteFile(g){
     const open=qcList().filter(d=>d.loc&&d.loc.libId===l.id&&d.status!=='closed').length;const nz=(l.shapes||[]).filter(s=>s.t==='poly').length;
     return `<div class="card"><div class="thumb" data-act="siteopen" data-id="${l.id}">${siteThumb(l)}</div><div class="body"><b class="small">หน้า ${l.page||1}</b>
      <div class="row small">${open?`<span class="chip bad">QC ค้าง ${open}</span>`:'<span class="chip good">ไม่มี QC ค้าง</span>'}${nz?`<span class="chip">${nz} โซน</span>`:''}</div>
-     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดหน้านี้</button>${can&&g.pages.length>1&&isOwnerKey('plans',l.id)?`<button class="btn sm bad" data-act="sitedelpg" data-id="${l.id}">ลบหน้า</button>`:''}</div></div></div>`}).join('')}</div>`;
+     <div class="row"><button class="btn pri sm" data-act="siteopen" data-id="${l.id}">เปิดหน้านี้</button>${canCreate()?`<button class="btn sm" data-act="sitedup" data-id="${l.id}">⧉ สำเนา</button>`:''}${can&&g.pages.length>1&&isOwnerKey('plans',l.id)?`<button class="btn sm bad" data-act="sitedelpg" data-id="${l.id}">ลบหน้า</button>`:''}</div></div></div>`}).join('')}</div>`;
 }
 const SITE_MINE=id=>'sitemine:'+id;
 function openSite(lib,opts){
@@ -493,6 +557,8 @@ async function exportQC(kind,opt){
 
 /* ---------- ตัวจัดการเหตุการณ์ของหน้า QC / แบบหน้างาน ---------- */
 const QCACT={
+  qbld(a){UI.qb=a.dataset.qb||'';$('#main').innerHTML=viewQC()},
+  qcrenum(a){armBtn(a,'กดอีกครั้งเพื่อยืนยัน เรียงเลขใหม่',()=>{const r=qcRenumber();toast(`เรียงเลขใหม่แล้ว ${r.rooms} ห้อง (เปลี่ยน ${r.changed} รายการ)`,4000);$('#main').innerHTML=viewQC()})},
   qcat(a){UI.qs=a.dataset.qcat||'';$('#main').innerHTML=viewQC()},
   qcnew(){if(!canCreate()){toast('ต้องเข้าสู่ระบบก่อนสร้างเอกสาร');return}Promise.resolve(allocNo('qc',1)).then(n=>{const d=newQC(null,n);render();editQC(d,{after:()=>render()})}).catch(x=>toast('ขอเลขที่ไม่สำเร็จ: '+((x&&x.message)||x),5000))},
   qcopen(a,id){const d=defectById(id);if(d)editQC(d,{after:()=>render()})},
@@ -503,6 +569,7 @@ const QCACT={
     if(pg.length===1){openSite(pg[0],{after:()=>render()});return}
     UI.siteFile=id;render();window.scrollTo(0,0)},
   siteback(){UI.siteFile=null;render()},
+  sitedup(a,id){dupPlanDlg(libById(id))},
   siteedit(a,id){UI.siteEdit=UI.siteEdit===id?null:id;render()},
   sitedl(a,id){const l=libById(id);if(l)downloadAttach(l)},
   delatt(a,id){armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.library=S.library.filter(l=>l.id!==id);save();render()})},

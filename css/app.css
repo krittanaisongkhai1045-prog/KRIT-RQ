@@ -470,3 +470,8 @@ input:not([type=checkbox]):not([type=radio]):not([type=file]):focus,select:focus
 .qph .thumb,.dl-im,.ph .im,.card .thumb{position:relative}.dl-im{overflow:hidden}
 .qthw img.qth{width:100%;height:100%;object-fit:contain;display:block;background:var(--surface2)}
 .qthw svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.ppw{display:flex;gap:6px;align-items:center;margin-bottom:6px}.ppw .pickrow{margin-bottom:0;flex:1;min-width:0}.ppd{flex:none;white-space:nowrap}
+.qbts{display:flex;gap:6px;overflow-x:auto;align-items:center;padding:2px 0 10px;scrollbar-width:none}.qbts::-webkit-scrollbar{display:none}
+.qbt{flex:none;display:flex;flex-direction:column;gap:1px;padding:7px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);text-align:left;cursor:pointer}
+.qbt b{font-size:14px}.qbt span{font-size:11px;color:var(--muted)}.qbt em{font-style:normal;color:var(--bad);font-weight:700}
+.qbt.on{border-color:var(--accent);background:var(--accent-soft)}
