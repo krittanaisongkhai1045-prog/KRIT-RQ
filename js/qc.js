@@ -51,9 +51,35 @@ function qcBldTiles(){
   if(!m.size)return'';const cur=UI.qb||'';
   const tile=(k,label,n,open)=>`<button class="qbt ${cur===k?'on':''}" data-act="qbld" data-qb="${esc(k)}"><b>${esc(label)}</b><span>${open?`<em>${open}</em> ค้าง · `:''}${n} จุด</span></button>`;
   return`<div class="qbts"><span class="small muted">อาคาร</span>${tile('','ทั้งหมด',all.length,all.filter(d=>d.status!=='closed').length)}${[...m.entries()].sort((a,b)=>natCmp(a[0],b[0])).map(([k,e])=>tile(k,k==='ไม่ระบุอาคาร'?k:'อาคาร '+k,e.n,e.open)).join('')}</div>`}
+/* ---- ตัวกรองละเอียด (UI.qx) ---- */
+const QX_F=[['floor','ชั้น',d=>String(d.floor||'').trim()],['area','ห้อง / พื้นที่',d=>String(d.area||'').trim()],['type','ประเภท DEFECT',d=>String(d.type||'').trim()],['owner','ผู้รับผิดชอบ',d=>String(d.owner||'').trim()],['inspector','ผู้ตรวจ',d=>String(d.inspector||'').trim()]];
+const qxActive=()=>{const x=UI.qx||{};return Object.keys(x).filter(k=>x[k]).length};
+function qcFilterPanel(){
+  const x=UI.qx||{};const base=qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(!UI.qb||qcBld(d)===UI.qb));
+  const n=qxActive();
+  let h=`<div class="row" style="margin:0 0 8px"><button class="btn sm" data-act="qxtog">🔎 ตัวกรอง${n?` <span class="chip bad">${n}</span>`:''} ${UI.qxo?'▴':'▾'}</button>${n?'<button class="btn sm" data-act="qxclr">ล้างตัวกรอง</button>':''}</div>`;
+  if(!UI.qxo)return h;
+  const opts=(get,cur)=>{const v=[...new Set(base.map(get).filter(Boolean))].sort(natCmp);if(cur&&!v.includes(cur))v.push(cur);return`<option value="">ทั้งหมด</option>`+v.map(o=>`<option value="${esc(o)}" ${o===cur?'selected':''}>${esc(o)}</option>`).join('')};
+  return h+`<div class="panel qxp"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+   ${QX_F.map(([k,l,get])=>`<label class="f">${l}<select id="qx-${k}">${opts(get,x[k]||'')}</select></label>`).join('')}
+   <label class="f">หมุดบนแบบ<select id="qx-pin"><option value="">ทั้งหมด</option><option value="y" ${x.pin==='y'?'selected':''}>ปักหมุดแล้ว</option><option value="n" ${x.pin==='n'?'selected':''}>ยังไม่ปักหมุด</option></select></label>
+   <label class="f">รูป After<select id="qx-aft"><option value="">ทั้งหมด</option><option value="y" ${x.aft==='y'?'selected':''}>มีรูป After</option><option value="n" ${x.aft==='n'?'selected':''}>ยังไม่มีรูป After</option></select></label>
+   <label class="f">พบตั้งแต่วันที่<input type="date" id="qx-from" value="${esc(x.from||'')}"></label>
+   <label class="f">ถึงวันที่<input type="date" id="qx-to" value="${esc(x.to||'')}"></label>
+   <label class="f" style="grid-column:1/-1">ค้นหาข้อความ (รหัส / รายละเอียด / หมายเหตุ)<input type="search" id="qx-text" value="${esc(x.text||'')}" placeholder="พิมพ์คำที่ต้องการหา"></label></div></div>`;
+}
+function qcMatchX(d){
+  const x=UI.qx||{};
+  for(const[k,,get]of QX_F)if(x[k]&&get(d)!==x[k])return false;
+  if(x.pin==='y'&&!d.loc)return false;if(x.pin==='n'&&d.loc)return false;
+  if(x.aft==='y'&&!(d.after||[]).length)return false;if(x.aft==='n'&&(d.after||[]).length)return false;
+  if(x.from&&String(d.found||'')<x.from)return false;if(x.to&&String(d.found||'')>x.to)return false;
+  if(x.text&&![d.code,d.building,d.floor,d.area,d.type,d.desc,d.fix,d.note,d.owner,d.inspector].join(' ').toLowerCase().includes(x.text.trim().toLowerCase()))return false;
+  return true;
+}
 function qcFiltered(){
   const f=UI.qf||'open',q=(UI.qq||'').trim().toLowerCase();
-  return qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(!UI.qb||qcBld(d)===UI.qb)&&(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
+  return qcList().filter(d=>(!UI.qs||qcWork(d)===UI.qs)&&(!UI.qb||qcBld(d)===UI.qb)&&qcMatchX(d)&&(f==='all'||(f==='open'?d.status!=='closed':f==='need'?(d.status||'open')==='open':d.status===f))&&(!q||[d.code,d.building,d.area,d.type,d.desc,d.fix].join(' ').toLowerCase().includes(q)))
     .sort((a,b)=>natCmp(qcBld(a),qcBld(b))||natCmp(String(a.floor||''),String(b.floor||''))||natCmp(String(a.area||''),String(b.area||''))||natCmp(String(a.code),String(b.code))||(a.num||0)-(b.num||0));
 }
 
@@ -70,6 +96,7 @@ function viewQC(){
    <div class="row" style="margin:12px 0"><select id="qf" style="width:auto">${[['open','ค้างอยู่ (ยังไม่ปิด)'],['need','ต้องแก้ไข'],['fixed','แก้แล้ว รอตรวจซ้ำ'],['closed','ปิดแล้ว'],['all','ทั้งหมด']].map(o=>`<option value="${o[0]}" ${o[0]===f?'selected':''}>${o[1]}</option>`).join('')}</select>
    <label class="row small muted" style="gap:6px">มุมมอง<select id="qv" style="width:auto;color:var(--fg)"><option value="card" ${UI.qv!=='table'?'selected':''}>การ์ด</option><option value="table" ${UI.qv==='table'?'selected':''}>ตาราง DEFECTS LIST</option></select></label>
    <label class="row small muted" style="gap:6px">จัดกลุ่ม<select id="qg" style="width:auto;color:var(--fg)">${[['building','อาคาร'],['work','งาน (Scope)'],['area','ห้อง / พื้นที่'],['type','ประเภท'],['none','ไม่จัดกลุ่ม']].map(o=>`<option value="${o[0]}" ${o[0]===g?'selected':''}>${o[1]}</option>`).join('')}</select></label>${owner?'<button class="btn sm" data-act="qcrenum" title="เรียงเลขรหัสใหม่ในแต่ละห้อง เริ่มจาก QC-01">เรียงเลข QC ใหม่ตามห้อง</button>':''}</div>`;
+  h+=qcFilterPanel();
   const ds=qcFiltered();
   if(!ds.length)return h+`<div class="empty">${all.length?'ไม่มีรายการในมุมมองนี้':owner?'ยังไม่มี QC DEFECT กด “บันทึก DEFECT ใหม่” หรือเปิด “แบบหน้างาน” แล้วปักหมุดที่จุดที่พบ':'ยังไม่มีข้อมูล'}</div>`;
   if(UI.qv==='table')return h+(MODE.ro?qcTableView(ds):qcTableEdit(ds));
@@ -557,6 +584,8 @@ async function exportQC(kind,opt){
 
 /* ---------- ตัวจัดการเหตุการณ์ของหน้า QC / แบบหน้างาน ---------- */
 const QCACT={
+  qxtog(a){UI.qxo=!UI.qxo;$('#main').innerHTML=viewQC()},
+  qxclr(a){UI.qx={};$('#main').innerHTML=viewQC()},
   qbld(a){UI.qb=a.dataset.qb||'';$('#main').innerHTML=viewQC()},
   qcrenum(a){armBtn(a,'กดอีกครั้งเพื่อยืนยัน เรียงเลขใหม่',()=>{const r=qcRenumber();toast(`เรียงเลขใหม่แล้ว ${r.rooms} ห้อง (เปลี่ยน ${r.changed} รายการ)`,4000);$('#main').innerHTML=viewQC()})},
   qcat(a){UI.qs=a.dataset.qcat||'';$('#main').innerHTML=viewQC()},
@@ -581,6 +610,7 @@ function qcInput(t){
   if(t.id==='qf'){UI.qf=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qv'){UI.qv=t.value;$('#main').innerHTML=viewQC();return true}
   if(t.id==='qg'){UI.qg=t.value;$('#main').innerHTML=viewQC();return true}
+  if(t.id&&t.id.startsWith('qx-')){const k=t.id.slice(3);UI.qx=UI.qx||{};UI.qx[k]=t.value;const p=t.selectionStart;$('#main').innerHTML=viewQC();const q=$('#'+t.id);if(q){q.focus();try{q.setSelectionRange(p,p)}catch(e){}}return true}
   if(t.id==='qq'){UI.qq=t.value;const p=t.selectionStart;$('#main').innerHTML=viewQC();const q=$('#qq');q.focus();q.setSelectionRange(p,p);return true}
   if(t.dataset&&t.dataset.qt){if(MODE.ro)return true;const[f,id]=t.dataset.qt.split(':');const d=defectById(id);if(d&&canEditDefect(d)){d[f]=t.value;save()}return true}
   if(t.dataset&&t.dataset.sl){if(MODE.ro)return true;if(fileItems(t.dataset.sl).length){setFileMeta(t.dataset.sl,t.dataset.k,t.value);save()}return true}

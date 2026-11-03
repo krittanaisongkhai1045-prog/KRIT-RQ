@@ -80,6 +80,7 @@ function onMainClick(e){
   case'nosig':S.project[id||'sigId']='';save();render();break;
   case'dellib':armBtn(a,'กดอีกครั้งเพื่อลบ',()=>{S.library=S.library.filter(l=>l.id!==id);save();render()});break;
   case'backup':doBackup();break;
+  case'newproj':projectSwitchDlg();break;
   case'wipe':armBtn(a,'กดอีกครั้งเพื่อยืนยันล้างทั้งหมด',async()=>{await wipeAll();render();toast('ล้างข้อมูลแล้ว')});break;
   }
 }
@@ -130,14 +131,14 @@ async function onMainChange(e){
   if((t.id==='logofile'||t.dataset.sigfor)&&t.files[0]){const im=await fileToImage(t.files[0],700,.9);const id=await putImage(im.url);S.project[t.id==='logofile'?'logoId':t.dataset.sigfor]=id;save();render();return}
   if(t.id==='restorefile'&&t.files[0]){await doRestore(t.files[0]);t.value='';return}
 }
-async function doBackup(){
+async function doBackup(fname){
   toast('กำลังรวบรวมรูปทั้งหมด…',3000);
   const ids=[...projectImageIds(),...qcImageIds()];S.requests.forEach(r=>ids.push(...reqImageIds(r)));
   if(MODE.kind!=='cloud')S.library.forEach(l=>l.srcId&&ids.push(l.srcId));   // ไฟล์ DWG (โหมดคลาวด์เก็บบน Storage อยู่แล้ว ไม่ใส่ในไฟล์สำรอง)
   await ensureData([...new Set(ids)]);
   const images={};[...new Set(ids)].forEach(id=>{const v=IMGDATA.get(id)||IMG.get(id);if(v&&String(v).startsWith('data:'))images[id]=v});
   const blob=new Blob([JSON.stringify({v:1,state:S,images})],{type:'application/json'});
-  await saveFile(`inspection-backup-${todayISO()}.json`,blob);
+  await saveFile(fname||`inspection-backup-${todayISO()}.json`,blob);
 }
 async function wipeAll(){
   const keepL=S.project.logoId,keepS=S.project.sigId;
@@ -148,6 +149,52 @@ async function wipeAll(){
   if(IDBH){await new Promise(res=>{const tx=IDBH.transaction(['kv','img'],'readwrite');tx.objectStore('kv').clear();tx.objectStore('img').clear();tx.oncomplete=res;tx.onerror=res})}
   IMG.clear();IMGDATA.clear();
   S={project:defaultProject(),requests:[],defects:[],library:[],access:[]};S.project.nextNo=1;S.project.logoId=keepL;S.project.sigId=keepS;await saveNow();UI.route='list';
+}
+/* ---------- เปลี่ยนโครงการ: เลือกเก็บ/ลบข้อมูลเก่า ---------- */
+function projectSwitchDlg(){
+  const cloud=MODE.kind==='cloud';
+  const o=overlay(`<div class="box"><h3 style="margin-bottom:4px">เปลี่ยนโครงการ</h3>
+   <p class="hint" style="margin:0 0 8px">ปัจจุบัน: <b>${esc(S.project.name||'-')}</b> · ใบตรวจ ${S.requests.length} · QC ${qcList().length} · คำขอเข้าห้อง ${accReqs().length}</p>
+   <label class="f">ชื่อโครงการใหม่<input type="text" id="np-n" placeholder="เช่น MODEVA PHASE 2" autocomplete="off"></label>
+   <label class="f" style="margin-top:6px">LOCATE (ถ้ามี)<input type="text" id="np-l"></label>
+   <div style="margin-top:12px;font-weight:700">ข้อมูลของโครงการเดิม</div>
+   <label class="row" style="gap:8px;align-items:flex-start;margin:6px 0"><input type="radio" name="np-m" value="keep" checked style="margin-top:4px"><span><b>เก็บไว้</b><span class="small muted" style="display:block">ดาวน์โหลดไฟล์สำรองของโครงการเดิมก่อน (รวมรูปทั้งหมด) แล้วเริ่มโครงการใหม่ — กลับมาเปิดได้ที่ “กู้ข้อมูลจากไฟล์”</span></span></label>
+   <label class="row" style="gap:8px;align-items:flex-start;margin:6px 0"><input type="radio" name="np-m" value="del" style="margin-top:4px"><span><b style="color:var(--bad)">ลบทิ้ง</b><span class="small muted" style="display:block">ล้างใบตรวจ DEFECT QC เคลม ขอเข้าห้อง และรูปทั้งหมด โดยไม่สำรอง กู้คืนไม่ได้${cloud?' · ข้อมูลบนคลาวด์ที่ทีมใช้ร่วมกันจะถูกลบด้วย':''}</span></span></label>
+   <div style="margin-top:10px;font-weight:700">ใช้ต่อในโครงการใหม่</div>
+   <label class="row small" style="gap:6px;margin:4px 0"><input type="checkbox" id="np-s" checked> บริษัท / ลายเซ็น / รายการตรวจ / ประเภท DEFECT / เลขที่ใบ (เริ่มที่ 1)</label>
+   <label class="row small" style="gap:6px;margin:4px 0"><input type="checkbox" id="np-lib"> คลังแบบหน้างาน (${sitePages().length} แผ่น)</label>
+   <label class="row small" style="gap:6px;margin:4px 0"><input type="checkbox" id="np-r"> รายชื่อห้องของขอเข้าห้อง</label>
+   <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" data-x="no">ยกเลิก</button><button class="btn pri" data-x="ok">เปลี่ยนโครงการ</button></div></div>`,'modal');
+  o.addEventListener('click',async e=>{
+    if(e.target===o||e.target.dataset.x==='no'){o.remove();return}
+    if(e.target.dataset.x!=='ok')return;
+    const name=$('#np-n',o).value.trim();if(!name){toast('ใส่ชื่อโครงการใหม่ก่อน');$('#np-n',o).focus();return}
+    const keepOld=o.querySelector('[name=np-m]:checked').value==='keep';
+    const opt={name,locate:$('#np-l',o).value.trim(),keepOld,carrySettings:$('#np-s',o).checked,carryLib:$('#np-lib',o).checked,carryRooms:$('#np-r',o).checked};
+    if(!keepOld&&!e.target.dataset.arm){e.target.dataset.arm=1;e.target.textContent='กดอีกครั้งเพื่อลบข้อมูลเก่า';e.target.classList.add('bad');return}
+    e.target.disabled=true;e.target.textContent='กำลังดำเนินการ…';
+    try{await switchProject(opt);o.remove();render();toast(keepOld?'เปลี่ยนโครงการแล้ว — เก็บไฟล์สำรองของโครงการเดิมไว้ในเครื่อง':'เปลี่ยนโครงการแล้ว — ลบข้อมูลเก่าเรียบร้อย',5000)}
+    catch(err){e.target.disabled=false;e.target.textContent='เปลี่ยนโครงการ';toast('เปลี่ยนโครงการไม่สำเร็จ: '+(err&&err.message||err),5000)}
+  });
+}
+async function switchProject(opt){
+  const old=S.project,slug=String(old.name||'project').replace(/[\\/:*?"<>|\s]+/g,'-');
+  if(opt.keepOld)await doBackup(`inspection-${slug}-${todayISO()}.json`);   // ต้องสำเร็จก่อน ถึงจะลบ
+  const lib=opt.carryLib?S.library.filter(isPage):[];
+  const rooms=opt.carryRooms?JSON.parse(JSON.stringify((S.access||[]).filter(a=>a.kind==='rooms'))):[];
+  const proj=opt.carrySettings?JSON.parse(JSON.stringify(old)):null;
+  const ids=new Set([old.logoId,old.sigId,old.reqSigId,old.engSigId].filter(Boolean));
+  lib.forEach(l=>{l.imgId&&ids.add(l.imgId)});
+  await ensureData([...ids]);
+  const keepImg=[...ids].map(id=>[id,IMGDATA.get(id)||IMG.get(id)]).filter(x=>x[1]&&String(x[1]).startsWith('data:'));
+  await wipeAll();
+  for(const[id,url]of keepImg)await putImage(url,id);
+  S.project=proj||Object.assign(defaultProject(),{logoId:old.logoId,sigId:old.sigId});
+  if(!proj){S.project.reqSigId=old.reqSigId;S.project.engSigId=old.engSigId}
+  Object.assign(S.project,{name:opt.name,locate:opt.locate,nextNo:1});
+  S.library=JSON.parse(JSON.stringify(lib));S.access=rooms;
+  save();if(MODE.kind==='cloud')await cloudFlush();else await saveNow();
+  UI.route='list';
 }
 async function doRestore(file){
   try{const j=JSON.parse(await file.text());if(!j.state||!j.state.project)throw new Error('ไฟล์ไม่ถูกต้อง');
